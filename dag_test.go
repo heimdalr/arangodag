@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/arangodb/go-driver"
 	"github.com/arangodb/go-driver/http"
-	//"github.com/go-test/deep"
+	"github.com/go-test/deep"
 	"testing"
 	"time"
 )
@@ -82,15 +82,15 @@ func TestDAG_AddVertex(t *testing.T) {
 	}
 
 }
-/*
-
 
 type foobar struct{A string; B string}
 type foobarKey struct{A string; B string; MyID string}
 func (o foobarKey) ID() string {
 	return o.MyID
 }
-func GetVertexTest(d DAG, t *testing.T) {
+func TestDAG_GetVertex(t *testing.T) {
+	d := someNewDag(t)
+
 	var v int = 1
 	k, _ := d.AddVertex(1)
 	if _ = d.GetVertex(k, &v); v != 1 {
@@ -127,7 +127,7 @@ func GetVertexTest(d DAG, t *testing.T) {
 		t.Errorf("GetVertex(\"\") = '%v', want empty key error", errEmpty)
 	}
 }
-
+/*
 func DeleteVertexTest(d DAG, t *testing.T) {
 
 	k1, _ := d.AddVertex(1)

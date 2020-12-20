@@ -9,14 +9,14 @@ import (
 const (
 	ErrVertexNil      = 1101
 
-	ErrEmptyKey       = 1201
-	ErrDuplicateKey   = 1202
-	ErrUnknownKey     = 1203
+	ErrEmptyID      = 1201
+	ErrDuplicateKey = 1202
+	ErrUnknownID    = 1203
 
-	ErrDuplicateEdge  = 1301
-	ErrUnknownEdge    = 1301
-	ErrLoop           = 1302
-	ErrSrcDstEqual    = 1303
+	//ErrDuplicateEdge  = 1301
+	//ErrUnknownEdge    = 1301
+	//ErrLoop           = 1302
+	//ErrSrcDstEqual    = 1303
 
 	ErrArango         = 1401
 )
@@ -96,22 +96,35 @@ func IsDuplicateIDError(err error) bool {
 	return IsErrorWithErrorNum(err, ErrDuplicateKey)
 }
 
+// EmptyIDError creates a new DAG error with an error number equal to
+// ErrEmptyID and an appropriate error message.
+func EmptyIDError() Error {
+	return NewError(ErrEmptyID, "id is empty")
+}
 
+// IsEmptyKeyError returns true, if the given error is a DAG error
+// with an error number equal to ErrEmptyID.
+func IsEmptyKeyError(err error) bool {
+	return IsErrorWithErrorNum(err, ErrEmptyID)
+}
+
+
+// IsUnknownKeyError returns true, if the given error is a DAG error
+// with an error number equal to ErrUnknownID.
+func IsUnknownKeyError(err error) bool {
+	return IsErrorWithErrorNum(err, ErrUnknownID)
+}
+
+// NewUnknownKeyError creates a new DAG error with an error number equal to
+// ErrUnknownID and an appropriate error message.
+func NewUnknownKeyError(key string) Error {
+	return NewError(ErrUnknownID, "'%s' is unknown", key)
+}
 
 
 /*
 
-// IsUnknownKeyError returns true, if the given error is a DAG error
-// with an error number equal to ErrUnknownKey.
-func IsUnknownKeyError(err error) bool {
-	return IsErrorWithErrorNum(err, ErrUnknownKey)
-}
 
-// IsEmptyKeyError returns true, if the given error is a DAG error
-// with an error number equal to ErrEmptyKey.
-func IsEmptyKeyError(err error) bool {
-	return IsErrorWithErrorNum(err, ErrEmptyKey)
-}
 
 // IsLoopError returns true, if the given error is a DAG error
 // with an error number equal to ErrLoop.
@@ -138,17 +151,7 @@ func IsSrcDstEqualError(err error) bool {
 }
 
 
-// NewEmptyKeyError creates a new DAG error with an error number equal to
-// ErrEmptyKey and an appropriate error message.
-func NewEmptyKeyError(key string) Error {
-	return NewError(ErrEmptyKey, "key is empty")
-}
 
-// NewUnknownKeyError creates a new DAG error with an error number equal to
-// ErrUnknownKey and an appropriate error message.
-func NewUnknownKeyError(key string) Error {
-	return NewError(ErrUnknownKey, "'%s' is unknown", key)
-}
 
 // NewDuplicateEdgeError creates a new DAG error with an error number equal to
 // ErrDuplicateEdge and an appropriate error message.
