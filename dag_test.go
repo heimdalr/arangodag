@@ -6,7 +6,7 @@ import (
 	"github.com/arangodb/go-driver/http"
 	"os"
 
-	//"github.com/go-test/deep"
+	"github.com/go-test/deep"
 	"testing"
 	"time"
 )
