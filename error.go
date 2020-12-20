@@ -62,7 +62,7 @@ func (e Error) Is(target error) bool {
 	if !ok {
 		return false
 	}
-	return e.ErrorNum == t.ErrorNum && t.IsDAGError == true
+	return e.ErrorNum == t.ErrorNum && t.IsDAGError
 }
 
 // IsErrorWithErrorNum returns true, if the given error is a DAG
