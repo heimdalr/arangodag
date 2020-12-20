@@ -36,7 +36,7 @@ jobs:
       - name: Run Tests
         run: go test -v ./...
         env:
-          ARANGODB_HOST: arangodb
+          ARANGODB_HOST: localhost
           ARANGODB_PORT: ${{ job.services.arangodb.ports[8529] }}
 
 
