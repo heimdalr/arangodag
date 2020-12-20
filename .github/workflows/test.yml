@@ -26,7 +26,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v2
-      - run: go test -v
+      - name: Run Tests
+        run: go test -v
         env:
           ARANGODB_HOST: arangodb
           ARANGODB_PORT: ${{ job.services.arangodb.ports[8529] }}
