@@ -1,7 +1,6 @@
 # arangodag
 
-[![run tests](https://github.com/heimdalr/arangodag/workflows/Test/badge.svg?branch=main)](https://github.com/heimdalr/arangodag/actions?
-query=workflow%3ATest+branch%3Amain)
+[![run tests](https://github.com/heimdalr/arangodag/workflows/Test/badge.svg?branch=main)](https://github.com/heimdalr/arangodag/actions?query=workflow%3ATest+branch%3Amain)
 
 <!--
 [![codecov](https://codecov.io/gh/heimdalr/dag/branch/master/graph/badge.svg)](https://codecov.io/gh/heimdalr/dag)
