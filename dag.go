@@ -26,14 +26,14 @@ func NewDAG(dbName, vertexCollName, edgeCollName string, client driver.Client) (
 
 	// use or create database
 	var db driver.Database
-	exists, err := client.DatabaseExists(nil, dbName)
+	exists, err := client.DatabaseExists(context.Background(), dbName)
 	if err != nil {
 		return nil, err
 	}
 	if exists {
-		db, err = client.Database(nil, dbName)
+		db, err = client.Database(context.Background(), dbName)
 	} else {
-		db, err = client.CreateDatabase(nil, dbName, nil)
+		db, err = client.CreateDatabase(context.Background(), dbName, nil)
 	}
 	if err != nil {
 		return nil, err
@@ -41,11 +41,14 @@ func NewDAG(dbName, vertexCollName, edgeCollName string, client driver.Client) (
 
 	// use or create vertex collection
 	var vertices driver.Collection
-	exists, err = db.CollectionExists(nil, vertexCollName)
+	exists, err = db.CollectionExists(context.Background(), vertexCollName)
+	if err != nil {
+		return nil, err
+	}
 	if exists {
-		vertices, err = db.Collection(nil, vertexCollName)
+		vertices, err = db.Collection(context.Background(), vertexCollName)
 	} else {
-		vertices, err = db.CreateCollection(nil, vertexCollName, nil)
+		vertices, err = db.CreateCollection(context.Background(), vertexCollName, nil)
 	}
 	if err != nil {
 		return nil, err
@@ -53,12 +56,15 @@ func NewDAG(dbName, vertexCollName, edgeCollName string, client driver.Client) (
 
 	// use or create edge collection
 	var edges driver.Collection
-	exists, err = db.CollectionExists(nil, edgeCollName)
+	exists, err = db.CollectionExists(context.Background(), edgeCollName)
+	if err != nil {
+		return nil, err
+	}
 	if exists {
-		edges, err = db.Collection(nil, edgeCollName)
+		edges, err = db.Collection(context.Background(), edgeCollName)
 	} else {
 		options := &driver.CreateCollectionOptions{Type: driver.CollectionTypeEdge}
-		edges, err = db.CreateCollection(nil, edgeCollName, options)
+		edges, err = db.CreateCollection(context.Background(), edgeCollName, options)
 	}
 	if err != nil {
 		return nil, err
