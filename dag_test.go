@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"github.com/arangodb/go-driver"
 	"github.com/arangodb/go-driver/http"
+	"os"
+
 	"github.com/go-test/deep"
 	"testing"
 	"time"
@@ -16,9 +18,19 @@ func someName() string {
 
 func someNewDag(t *testing.T) *DAG {
 
+	// get arangdb host and port from environment
+	host := os.Getenv("ARANGODB_HOST")
+	if host == "" {
+		t.Fatal("environment variable 'ARANGODB_HOST' not set")
+	}
+	port := os.Getenv("ARANGODB_PORT")
+	if port == "" {
+		t.Fatal("environment variable 'ARANGODB_PORT' not set")
+	}
+
 	// new connection
 	conn, _ := http.NewConnection(http.ConnectionConfig{
-		Endpoints: []string{"http://localhost:8529"},
+		Endpoints: []string{fmt.Sprintf("http://%s:%s", host, port)},
 	})
 
 	// new client
@@ -32,7 +44,7 @@ func someNewDag(t *testing.T) *DAG {
 
 	d, err := NewDAG(dbName, vertexCollName, edgeCollName, client)
 	if err != nil {
-		t.Error(err)
+		t.Fatalf("failed to setup new dag: %v", err)
 	}
 	return d
 }
