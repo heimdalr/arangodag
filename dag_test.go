@@ -21,22 +21,28 @@ func someNewDag(t *testing.T) *DAG {
 	// get arangdb host and port from environment
 	host := os.Getenv("ARANGODB_HOST")
 	if host == "" {
-		t.Fatal("environment variable 'ARANGODB_HOST' not set")
+		host = "localhost"
 	}
 	port := os.Getenv("ARANGODB_PORT")
 	if port == "" {
-		t.Fatal("environment variable 'ARANGODB_PORT' not set")
+		port = "8529"
 	}
 
 	// new connection
-	conn, _ := http.NewConnection(http.ConnectionConfig{
+	conn, err := http.NewConnection(http.ConnectionConfig{
 		Endpoints: []string{fmt.Sprintf("http://%s:%s", host, port)},
 	})
+	if err != nil {
+		t.Fatalf("failed to setup connection: %v", err)
+	}
 
 	// new client
-	client, _ := driver.NewClient(driver.ClientConfig{
+	client, err := driver.NewClient(driver.ClientConfig{
 		Connection: conn,
 	})
+	if err != nil {
+		t.Fatalf("failed to setup client: %v", err)
+	}
 
 	dbName := someName()
 	vertexCollName := someName()
@@ -66,37 +72,45 @@ func TestDAG_AddVertex(t *testing.T) {
 	d := someNewDag(t)
 
 	// simple vertex
-	_, errNoID := d.AddVertex("1")
-	if errNoID != nil {
-		t.Errorf("AddVertex(\"1\") returned unexpected error '%v'", errNoID)
+	_, err := d.AddVertex("1")
+	if err != nil {
+		t.Errorf("failed to AddVertex(): %v", err)
 	}
 
 	// vertex with id
 	id := "1"
-	idReturned, errID := d.AddVertex(idVertex{MyID: "1"})
-	if errID != nil {
-		t.Errorf("AddVertex({MyID: \"1\"}) returned unexpected error '%v'", errID)
+	idReturned, err := d.AddVertex(idVertex{MyID: "1"})
+	if err != nil {
+		t.Fatalf("failed to AddVertex(): %v", err)
 	}
 	if idReturned != id {
-		t.Errorf("AddVertex({MyID: \"1\"}) = '%s', want %s", idReturned, id)
+		t.Errorf("AddVertex() = '%s', want %s", idReturned, id)
 	}
 
 	// duplicate
 	_, errDuplicate := d.AddVertex(idVertex{MyID: "1"})
 	if !IsDuplicateIDError(errDuplicate) {
-		t.Errorf("AddVertex(v) = '%v', want duplicate key error", errDuplicate)
+		t.Errorf("want DuplicateIDError, got %v", errDuplicate)
 	}
 
 	// nil
 	_, errNil := d.AddVertex(nil)
 	if !IsVertexNilError(errNil) {
-		t.Errorf("AddVertex(v) = '%v', want vertex nil error", errNil)
+		t.Errorf("want VertexNilError, got %v", errNil)
 	}
 
 }
 
-type foobar struct{A string; B string}
-type foobarKey struct{A string; B string; MyID string}
+type foobar struct {
+	A string
+	B string
+}
+type foobarKey struct {
+	A    string
+	B    string
+	MyID string
+}
+
 func (o foobarKey) ID() string {
 	return o.MyID
 }
@@ -105,7 +119,11 @@ func TestDAG_GetVertex(t *testing.T) {
 
 	var v int = 1
 	k, _ := d.AddVertex(1)
-	if _ = d.GetVertex(k, &v); v != 1 {
+	err := d.GetVertex(k, &v)
+	if err != nil {
+		t.Errorf("failed to GetVertex(): %v", err)
+	}
+	if v != 1 {
 		t.Errorf("GetVertex() = %v, want %v", v, 1)
 	}
 
@@ -113,32 +131,90 @@ func TestDAG_GetVertex(t *testing.T) {
 	v2 := foobar{A: "foo", B: "bar"}
 	var v3 foobar
 	k2, _ := d.AddVertex(v2)
-	_ = d.GetVertex(k2, &v3)
+	err = d.GetVertex(k2, &v3)
+	if err != nil {
+		t.Errorf("failed to GetVertex(): %v", err)
+	}
 	if deep.Equal(v2, v3) != nil {
 		t.Errorf("GetVertex() = %v, want %v", v3, v2)
 	}
 
 	// "complex" document with key
-	v4 := foobarKey{A: "foo", B: "bar", MyID: "meintollerkey"}
+	v4 := foobarKey{A: "foo", B: "bar", MyID: "myFancyKey"}
 	var v5 foobarKey
 	k4, _ := d.AddVertex(v4)
-	_ = d.GetVertex(k4, &v5)
+	err = d.GetVertex(k4, &v5)
+	if err != nil {
+		t.Errorf("failed to GetVertex(): %v", err)
+	}
 	if deep.Equal(v4, v5) != nil {
 		t.Errorf("GetVertex() = %v, want %v", v5, v4)
 	}
 
 	// unknown
 	errUnknown := d.GetVertex("foo", v)
-	if ! IsUnknownKeyError(errUnknown) {
-		t.Errorf("GetVertex(\"foo\") = '%v', want unknown key error", errUnknown)
+	if !IsUnknownIDError(errUnknown) {
+		t.Errorf("want IsUnknownIDError, got %v", errUnknown)
 	}
 
 	// empty
 	errEmpty := d.GetVertex("", v)
-	if ! IsEmptyKeyError(errEmpty) {
-		t.Errorf("GetVertex(\"\") = '%v', want empty key error", errEmpty)
+	if !IsEmptyIDError(errEmpty) {
+		t.Errorf("want EmptyIDError, got %v", errEmpty)
 	}
 }
+
+func TestDAG_GetOrder(t *testing.T) {
+	d := someNewDag(t)
+	order, err := d.GetOrder()
+	if err != nil {
+		t.Errorf("failed to GetOrder(): %v", err)
+	}
+	if order != 0 {
+		t.Errorf("GetOrder() = %d, want %d", order, 0)
+	}
+
+	for i := 1; i <= 10; i++ {
+		_, _ = d.AddVertex(i)
+		order, err = d.GetOrder()
+		if err != nil {
+			t.Errorf("failed to GetOrder(): %v", err)
+		}
+		if int(order) != i {
+			t.Errorf("GetOrder() = %d, want %d", order, 1)
+		}
+	}
+}
+
+func TestDAG_GetSize(t *testing.T) {
+	d := someNewDag(t)
+	size, err := d.GetSize()
+	if err != nil {
+		t.Errorf("failed to GetSize(): %v", err)
+	}
+	if size != 0 {
+		t.Errorf("GetSize() = %d, want %d", size, 0)
+	}
+
+	/*
+		for i := 1; i <= 9; i++ {
+			id1, _ := d.AddVertex(i*10)
+			id2, _ := d.AddVertex(i*10+1)
+			d.AddEdge(id1, id2)
+			size, err := d.GetSize()
+			if err != nil {
+				t.Errorf("failed to GetSize(): %v", err)
+			}
+			if size != 0 {
+				t.Errorf("GetSize() = %d, want %d", size, 0)
+			}
+			if int(size) != i {
+				t.Errorf("GetSize() = %d, want %d", size, 1)
+			}
+		}
+	*/
+}
+
 /*
 func DeleteVertexTest(d DAG, t *testing.T) {
 
@@ -214,13 +290,13 @@ func DeleteVertexTest(d DAG, t *testing.T) {
 
 	// unknown
 	errUnknown := d.DeleteVertex("foo")
-	if ! IsUnknownKeyError(errUnknown) {
+	if ! IsUnknownIDError(errUnknown) {
 		t.Errorf("DeleteVertex(\"foo\") = '%v', want unknown key error", errUnknown)
 	}
 
 	// empty
 	errEmpty := d.DeleteVertex("")
-	if ! IsEmptyKeyError(errEmpty) {
+	if ! IsEmptyIDError(errEmpty) {
 		t.Errorf("DeleteVertex(\"\") = '%v', want empty key error", errEmpty)
 	}
 }
@@ -290,11 +366,11 @@ func AddEdgeTest(d DAG, t *testing.T) {
 
 	// empty
 	errEmptySrc := d.AddEdge("", k2)
-	if ! IsEmptyKeyError(errEmptySrc) {
+	if ! IsEmptyIDError(errEmptySrc) {
 		t.Errorf("AddEdge(\"\", k2) = '%v', want empty key error", errEmptySrc)
 	}
 	errEmptyDst := d.AddEdge(k1, "")
-	if ! IsEmptyKeyError(errEmptyDst) {
+	if ! IsEmptyIDError(errEmptyDst) {
 		t.Errorf("AddEdge(k1, \"\") = '%v', want empty key error", errEmptyDst)
 	}
 }
@@ -320,11 +396,11 @@ func DeleteEdgeTest(d DAG, t *testing.T) {
 
 	// empty
 	errEmptySrc := d.DeleteEdge("", k1)
-	if ! IsEmptyKeyError(errEmptySrc) {
+	if ! IsEmptyIDError(errEmptySrc) {
 		t.Errorf("DeleteEdge(\"\", k1) = '%v', want empty key error", errEmptySrc)
 	}
 	errEmptyDst := d.DeleteEdge(k0, "")
-	if ! IsEmptyKeyError(errEmptyDst) {
+	if ! IsEmptyIDError(errEmptyDst) {
 		t.Errorf("DeleteEdge(k0, \"\") = '%v', want empty key error", errEmptyDst)
 	}
 
@@ -332,12 +408,12 @@ func DeleteEdgeTest(d DAG, t *testing.T) {
 
 	// unknown
 	errUnknownSrc := d.DeleteEdge("foo", k1)
-	if ! IsUnknownKeyError(errUnknownSrc) {
+	if ! IsUnknownIDError(errUnknownSrc) {
 		t.Errorf("DeleteEdge(\"foo\", k1) = '%v', want unknown key error", errUnknownSrc)
 	}
 
 	errUnknownDst := d.DeleteEdge(k0, "foo")
-	if ! IsUnknownKeyError(errUnknownDst) {
+	if ! IsUnknownIDError(errUnknownDst) {
 		t.Errorf("DeleteEdge(k0, \"foo\") = '%v', want unknown key error", errUnknownDst)
 	}
 }
@@ -364,13 +440,13 @@ func GetChildrenTest(d DAG, t *testing.T) {
 
 	// unknown
 	_, errUnknown := d.GetChildren("foo")
-	if ! IsUnknownKeyError(errUnknown) {
+	if ! IsUnknownIDError(errUnknown) {
 		t.Errorf("GetChildren(\"foo\") = '%v', want unknown key error", errUnknown)
 	}
 
 	// empty
 	_, errEmpty := d.GetChildren("")
-	if ! IsEmptyKeyError(errEmpty) {
+	if ! IsEmptyIDError(errEmpty) {
 		t.Errorf("GetChildren(\"\") = '%v', want empty key error", errEmpty)
 	}
 
@@ -399,13 +475,13 @@ func GetParentsTest(d DAG, t *testing.T) {
 
 	// unknown
 	_, errUnknown := d.GetParents("foo")
-	if ! IsUnknownKeyError(errUnknown) {
+	if ! IsUnknownIDError(errUnknown) {
 		t.Errorf("GetParents(\"foo\") = '%v', want unknown key error", errUnknown)
 	}
 
 	// empty
 	_, errEmpty := d.GetParents("")
-	if ! IsEmptyKeyError(errEmpty) {
+	if ! IsEmptyIDError(errEmpty) {
 		t.Errorf("GetParents(\"\") = '%v', want empty key error", errEmpty)
 	}
 
@@ -437,13 +513,13 @@ func GetDescendantsTest(d DAG, t *testing.T) {
 
 	// unknown
 	_, errUnknown := d.GetDescendants("foo")
-	if ! IsUnknownKeyError(errUnknown) {
+	if ! IsUnknownIDError(errUnknown) {
 		t.Errorf("GetDescendants(\"foo\") = '%v', want unknown key error", errUnknown)
 	}
 
 	// empty
 	_, errEmpty := d.GetDescendants("")
-	if ! IsEmptyKeyError(errEmpty) {
+	if ! IsEmptyIDError(errEmpty) {
 		t.Errorf("GetDescendants(\"\") = '%v', want empty key error", errEmpty)
 	}
 }
@@ -477,13 +553,13 @@ func GetOrderedDescendantsTest(d DAG, t *testing.T) {
 
 	// unknown
 	_, errUnknown := d.GetOrderedDescendants("foo")
-	if ! IsUnknownKeyError(errUnknown) {
+	if ! IsUnknownIDError(errUnknown) {
 		t.Errorf("GetOrderedDescendants(\"foo\") = '%v', want unknown key error", errUnknown)
 	}
 
 	// empty
 	_, errEmpty := d.GetOrderedDescendants("")
-	if ! IsEmptyKeyError(errEmpty) {
+	if ! IsEmptyIDError(errEmpty) {
 		t.Errorf("GetOrderedDescendants(\"\") = '%v', want empty key error", errEmpty)
 	}
 }
@@ -548,13 +624,13 @@ func GetAncestorsTest(d DAG, t *testing.T) {
 
 	// unknown
 	_, errUnknown := d.GetAncestors("foo")
-	if ! IsUnknownKeyError(errUnknown) {
+	if ! IsUnknownIDError(errUnknown) {
 		t.Errorf("GetAncestors(\"foo\") = '%v', want unknown key error", errUnknown)
 	}
 
 	// empty
 	_, errEmpty := d.GetAncestors("")
-	if ! IsEmptyKeyError(errEmpty) {
+	if ! IsEmptyIDError(errEmpty) {
 		t.Errorf("GetAncestors(\"\") = '%v', want empty key error", errEmpty)
 	}
 
@@ -586,13 +662,13 @@ func GetOrderedAncestorsTest(d DAG, t *testing.T) {
 
 	// unknown
 	_, errUnknown := d.GetOrderedAncestors("foo")
-	if ! IsUnknownKeyError(errUnknown) {
+	if ! IsUnknownIDError(errUnknown) {
 		t.Errorf("GetOrderedAncestors(\"foo\") = '%v', want unknown key error", errUnknown)
 	}
 
 	// empty
 	_, errEmpty := d.GetOrderedAncestors("")
-	if ! IsEmptyKeyError(errEmpty) {
+	if ! IsEmptyIDError(errEmpty) {
 		t.Errorf("GetOrderedAncestors(\"\") = '%v', want empty key error", errEmpty)
 	}
 }
@@ -637,13 +713,13 @@ func AncestorsWalkerTest(d DAG, t *testing.T) {
 
 	// unknown
 	_, _, errUnknown := d.AncestorsWalker("foo")
-	if ! IsUnknownKeyError(errUnknown) {
+	if ! IsUnknownIDError(errUnknown) {
 		t.Errorf("AncestorsWalker(\"foo\") = '%v', want unknown key error", errUnknown)
 	}
 
 	// empty
 	_, _, errEmpty := d.AncestorsWalker("")
-	if ! IsEmptyKeyError(errEmpty) {
+	if ! IsEmptyIDError(errEmpty) {
 		t.Errorf("AncestorsWalker(\"\") = '%v', want empty key error", errEmpty)
 	}
 }
