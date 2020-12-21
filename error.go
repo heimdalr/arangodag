@@ -7,20 +7,19 @@ import (
 
 // Error constants
 const (
-	ErrVertexNil      = 1101
+	ErrVertexNil = 1101
 
-	ErrEmptyID      = 1201
-	ErrDuplicateKey = 1202
-	ErrUnknownID    = 1203
+	ErrEmptyID     = 1201
+	ErrDuplicateID = 1202
+	ErrUnknownID   = 1203
 
 	//ErrDuplicateEdge  = 1301
 	//ErrUnknownEdge    = 1301
 	//ErrLoop           = 1302
 	//ErrSrcDstEqual    = 1303
 
-	ErrArango         = 1401
+	ErrArango = 1401
 )
-
 
 // Error is the type for DAG errors.
 type Error struct {
@@ -71,7 +70,6 @@ func IsErrorWithErrorNum(err error, num int) bool {
 	return errors.Is(err, NewError(num, ""))
 }
 
-
 // VertexNilError creates a new DAG error with an error number equal to
 // ErrVertexNil and an appropriate error message.
 func VertexNilError() Error {
@@ -85,15 +83,15 @@ func IsVertexNilError(err error) bool {
 }
 
 // DuplicateIDError creates a new DAG error with an error number equal to
-// ErrDuplicateKey and an appropriate error message.
+// ErrDuplicateID and an appropriate error message.
 func DuplicateIDError(id string) Error {
-	return NewError(ErrDuplicateKey, "'%s' is already known", id)
+	return NewError(ErrDuplicateID, "'%s' is already known", id)
 }
 
 // IsDuplicateIDError returns true, if the given error is a DAG error
-// with an error number equal to ErrDuplicateKey.
+// with an error number equal to ErrDuplicateID.
 func IsDuplicateIDError(err error) bool {
-	return IsErrorWithErrorNum(err, ErrDuplicateKey)
+	return IsErrorWithErrorNum(err, ErrDuplicateID)
 }
 
 // EmptyIDError creates a new DAG error with an error number equal to
@@ -102,16 +100,15 @@ func EmptyIDError() Error {
 	return NewError(ErrEmptyID, "id is empty")
 }
 
-// IsEmptyKeyError returns true, if the given error is a DAG error
+// IsEmptyIDError returns true, if the given error is a DAG error
 // with an error number equal to ErrEmptyID.
-func IsEmptyKeyError(err error) bool {
+func IsEmptyIDError(err error) bool {
 	return IsErrorWithErrorNum(err, ErrEmptyID)
 }
 
-
-// IsUnknownKeyError returns true, if the given error is a DAG error
+// IsUnknownIDError returns true, if the given error is a DAG error
 // with an error number equal to ErrUnknownID.
-func IsUnknownKeyError(err error) bool {
+func IsUnknownIDError(err error) bool {
 	return IsErrorWithErrorNum(err, ErrUnknownID)
 }
 
@@ -120,7 +117,6 @@ func IsUnknownKeyError(err error) bool {
 func NewUnknownKeyError(key string) Error {
 	return NewError(ErrUnknownID, "'%s' is unknown", key)
 }
-
 
 /*
 

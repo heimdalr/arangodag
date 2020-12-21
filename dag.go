@@ -73,7 +73,6 @@ func NewDAG(dbName, vertexCollName, edgeCollName string, client driver.Client) (
 	return &DAG{vertices: vertices, edges: edges, client: client}, nil
 }
 
-
 type arangoDocContainer struct {
 	Payload interface{} `json:"payload"`
 }
@@ -150,9 +149,9 @@ func (d *DAG) GetVertex(id string, vertex interface{}) error {
 	return nil
 }
 
-/*
+// GetOrder returns the number of vertices in the graph.
 func (d *DAG) GetOrder() (uint64, error) {
-	count, err := d.vertices.Count(nil)
+	count, err := d.vertices.Count(context.Background())
 	if err != nil {
 		return 0, err
 	}
@@ -160,14 +159,16 @@ func (d *DAG) GetOrder() (uint64, error) {
 
 }
 
+// GetSize returns the number of edges in the graph.
 func (d *DAG) GetSize() (uint64, error) {
-	count, err := d.edges.Count(nil)
+	count, err := d.edges.Count(context.Background())
 	if err != nil {
 		return 0, err
 	}
 	return uint64(count), nil
 }
 
+/*
 func (d *DAG) GetLeaves() (map[string]struct{}, error) {
 	// TODO: use bind variables
 	query := fmt.Sprintf("FOR d IN %s RETURN d", d.vertices.Name())
