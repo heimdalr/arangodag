@@ -21,11 +21,11 @@ func someNewDag(t *testing.T) *DAG {
 	// get arangdb host and port from environment
 	host := os.Getenv("ARANGODB_HOST")
 	if host == "" {
-		t.Fatal("environment variable 'ARANGODB_HOST' not set")
+		host = "localhost"
 	}
 	port := os.Getenv("ARANGODB_PORT")
 	if port == "" {
-		t.Fatal("environment variable 'ARANGODB_PORT' not set")
+		port = "8529"
 	}
 
 	// new connection
