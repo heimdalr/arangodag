@@ -37,10 +37,10 @@ type DAG interface {
 	// already exists, or if the new edge would create a loop.
 	AddEdge(srcKey, dstKey string) error
 
-	// IsEdge returns true, if there exists an edge between srcKey and dstKey.
-	// IsEdge returns false, if there is no such edge. IsEdge returns an error,
+	// EnsureEdge returns true, if there exists an edge between srcKey and dstKey.
+	// EnsureEdge returns false, if there is no such edge. EnsureEdge returns an error,
 	// if srcKey or dstKey are empty, unknown, or the same.
-	IsEdge(srcKey, dstKey string) (bool, error)
+	EnsureEdge(srcKey, dstKey string) (bool, error)
 
 	// DeleteEdge deletes the edge between srcKey and dstKey. DeleteEdge
 	// returns an error, if srcKey or dstKey are empty or unknown, or if,

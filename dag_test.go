@@ -44,11 +44,7 @@ func someNewDag(t *testing.T) *DAG {
 		t.Fatalf("failed to setup client: %v", err)
 	}
 
-	dbName := someName()
-	vertexCollName := someName()
-	edgeCollName := someName()
-
-	d, err := NewDAG(dbName, vertexCollName, edgeCollName, client)
+	d, err := NewDAG("db_"+someName(), "vertecies_"+someName(), "edges_"+someName(), "graph_"+someName(), client)
 	if err != nil {
 		t.Fatalf("failed to setup new dag: %v", err)
 	}
@@ -89,8 +85,9 @@ func TestDAG_AddVertex(t *testing.T) {
 
 	// duplicate
 	_, errDuplicate := d.AddVertex(idVertex{MyID: "1"})
-	if !IsDuplicateIDError(errDuplicate) {
-		t.Errorf("want DuplicateIDError, got %v", errDuplicate)
+	want := 1210
+	if !IsAragoErrorWithErrorNum(errDuplicate, want) {
+		t.Errorf("want Arango error with error number %d, got %v", want, errDuplicate)
 	}
 
 	// nil
@@ -121,7 +118,7 @@ func TestDAG_GetVertex(t *testing.T) {
 	k, _ := d.AddVertex(1)
 	err := d.GetVertex(k, &v)
 	if err != nil {
-		t.Errorf("failed to GetVertex(): %v", err)
+		t.Fatalf("failed to GetVertex(): %v", err)
 	}
 	if v != 1 {
 		t.Errorf("GetVertex() = %v, want %v", v, 1)
@@ -133,7 +130,7 @@ func TestDAG_GetVertex(t *testing.T) {
 	k2, _ := d.AddVertex(v2)
 	err = d.GetVertex(k2, &v3)
 	if err != nil {
-		t.Errorf("failed to GetVertex(): %v", err)
+		t.Fatalf("failed to GetVertex(): %v", err)
 	}
 	if deep.Equal(v2, v3) != nil {
 		t.Errorf("GetVertex() = %v, want %v", v3, v2)
@@ -145,7 +142,7 @@ func TestDAG_GetVertex(t *testing.T) {
 	k4, _ := d.AddVertex(v4)
 	err = d.GetVertex(k4, &v5)
 	if err != nil {
-		t.Errorf("failed to GetVertex(): %v", err)
+		t.Fatalf("failed to GetVertex(): %v", err)
 	}
 	if deep.Equal(v4, v5) != nil {
 		t.Errorf("GetVertex() = %v, want %v", v5, v4)
@@ -154,7 +151,7 @@ func TestDAG_GetVertex(t *testing.T) {
 	// unknown
 	errUnknown := d.GetVertex("foo", v)
 	if !IsUnknownIDError(errUnknown) {
-		t.Errorf("want IsUnknownIDError, got %v", errUnknown)
+		t.Errorf("want UnknownIDError, got %v", errUnknown)
 	}
 
 	// empty
@@ -168,7 +165,7 @@ func TestDAG_GetOrder(t *testing.T) {
 	d := someNewDag(t)
 	order, err := d.GetOrder()
 	if err != nil {
-		t.Errorf("failed to GetOrder(): %v", err)
+		t.Fatalf("failed to GetOrder(): %v", err)
 	}
 	if order != 0 {
 		t.Errorf("GetOrder() = %d, want %d", order, 0)
@@ -178,12 +175,169 @@ func TestDAG_GetOrder(t *testing.T) {
 		_, _ = d.AddVertex(i)
 		order, err = d.GetOrder()
 		if err != nil {
-			t.Errorf("failed to GetOrder(): %v", err)
+			t.Fatalf("failed to GetOrder(): %v", err)
 		}
 		if int(order) != i {
 			t.Errorf("GetOrder() = %d, want %d", order, 1)
 		}
 	}
+}
+
+func TestDAG_IsAncestor(t *testing.T) {
+	d := someNewDag(t)
+	k0, _ := d.AddVertex(0)
+	k1, _ := d.AddVertex(1)
+
+	isAncestor, err := d.IsAncestor(k0, k1)
+	if err != nil {
+		t.Fatalf("failed to IsAncestor(): %v", err)
+	}
+	if isAncestor == true {
+		t.Errorf("IsAncestor() = %v, want false", isAncestor)
+	}
+
+	isAncestor, err = d.IsAncestor(k1, k0)
+	if err != nil {
+		t.Fatalf("failed to IsAncestor(): %v", err)
+	}
+	if isAncestor == true {
+		t.Errorf("IsAncestor() = %v, want false", isAncestor)
+	}
+
+	d.AddEdge(k0, k1)
+	isAncestor, err = d.IsAncestor(k1, k0)
+	if err != nil {
+		t.Fatalf("failed to IsAncestor(): %v", err)
+	}
+	if isAncestor != true {
+		t.Errorf("IsAncestor() = %v, want true", isAncestor)
+	}
+
+	isAncestor, err = d.IsAncestor(k0, k1)
+	if err != nil {
+		t.Fatalf("failed to IsAncestor(): %v", err)
+	}
+	if isAncestor == true {
+		t.Errorf("IsAncestor() = %v, want false", isAncestor)
+	}
+
+	k2, _ := d.AddVertex(2)
+	k3, _ := d.AddVertex(3)
+
+	d.AddEdge(k1, k2)
+	d.AddEdge(k2, k3)
+
+	isAncestor, err = d.IsAncestor(k2, k0)
+	if err != nil {
+		t.Fatalf("failed to IsAncestor(): %v", err)
+	}
+	if isAncestor != true {
+		t.Errorf("IsAncestor() = %v, want true", isAncestor)
+	}
+	isAncestor, err = d.IsAncestor(k3, k0)
+	if err != nil {
+		t.Fatalf("failed to IsAncestor(): %v", err)
+	}
+	if isAncestor != true {
+		t.Errorf("IsAncestor() = %v, want true", isAncestor)
+	}
+}
+
+func TestDAG_AddEdge(t *testing.T) {
+	d := someNewDag(t)
+	k0, _ := d.AddVertex(0)
+	k1, _ := d.AddVertex(1)
+	//k2, _ := d.AddVertex(2)
+	//k3, _ := d.AddVertex(3)
+
+	_, err := d.AddEdge(k0, k1)
+	if err != nil {
+		t.Errorf("failed to AddEdge(): %v", err)
+	}
+
+	// empty
+	_, errEmptySrc := d.AddEdge("", k1)
+	if !IsEmptyIDError(errEmptySrc) {
+		t.Errorf("want EmptyIDError, got %v", errEmptySrc)
+	}
+	_, errEmptyDst := d.AddEdge(k1, "")
+	if !IsEmptyIDError(errEmptyDst) {
+		t.Errorf("want EmptyIDError, got %v", errEmptyDst)
+	}
+
+	// src and dst equal
+	_, errEqual := d.AddEdge(k1, k1)
+	if !IsSrcDstEqualError(errEqual) {
+		t.Errorf("want SrcDstEqualError, got %v", errEqual)
+	}
+
+	// duplicate
+	_, errDuplicate := d.AddEdge(k0, k1)
+	if !IsDuplicateEdgeError(errDuplicate) {
+		t.Errorf("want DuplicateEdgeError, got %v", errDuplicate)
+	}
+
+	_, errLoop := d.AddEdge(k1, k0)
+	if !IsLoopError(errLoop) {
+		t.Errorf("want LoopError, got %v", errLoop)
+	}
+
+	/*
+		// add a single edge and inspect the graph
+		_ = d.AddEdge(k1, k2)
+		if children, _ := d.GetChildren(k1); len(children) != 1 {
+			t.Errorf("GetChildren(k1) = %d, want 1", len(children))
+		}
+		if parents, _ := d.GetParents(k2); len(parents) != 1 {
+			t.Errorf("GetParents(k2) = %d, want 1", len(parents))
+		}
+		if leaves, _ := d.GetLeaves(); len(leaves) != 3 {
+			t.Errorf("GetLeaves() = %d, want 3", len(leaves))
+		}
+		if roots, _ := d.GetRoots(); len(roots) != 3 {
+			t.Errorf("GetRoots() = %d, want 3", len(roots))
+		}
+		if vertices, _ := d.GetDescendants(k1); len(vertices) != 1 {
+			t.Errorf("GetDescendants(k1) = %d, want 1", len(vertices))
+		}
+		if vertices, _ := d.GetAncestors(k2); len(vertices) != 1 {
+			t.Errorf("GetAncestors(k2) = %d, want 1", len(vertices))
+		}
+
+		err := d.AddEdge(k2, k3)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if vertices, _ := d.GetDescendants(k1); len(vertices) != 2 {
+			t.Errorf("GetDescendants(k1) = %d, want 2", len(vertices))
+		}
+		if vertices, _ := d.GetAncestors(k3); len(vertices) != 2 {
+			t.Errorf("GetAncestors(k3) = %d, want 2", len(vertices))
+		}
+
+		_ = d.AddEdge(k0, k1)
+		if vertices, _ := d.GetDescendants(k0); len(vertices) != 3 {
+			t.Errorf("GetDescendants(k0) = %d, want 3", len(vertices))
+		}
+		if vertices, _ := d.GetAncestors(k3); len(vertices) != 3 {
+			t.Errorf("GetAncestors(k3) = %d, want 3", len(vertices))
+		}
+
+		// loop
+		errEqual := d.AddEdge(k1, k1)
+		if ! IsSrcDstEqualError(errEqual) {
+			t.Errorf("AddEdge(k1, k1) = '%v', want loop error", errEqual)
+		}
+
+		errLoop := d.AddEdge(k2, k1)
+		if ! IsLoopError(errLoop) {
+			t.Errorf("AddEdge(k2, k1) = '%v', want loop error", errLoop)
+		}
+
+
+
+	*/
+
 }
 
 func TestDAG_GetSize(t *testing.T) {
@@ -196,23 +350,19 @@ func TestDAG_GetSize(t *testing.T) {
 		t.Errorf("GetSize() = %d, want %d", size, 0)
 	}
 
-	/*
-		for i := 1; i <= 9; i++ {
-			id1, _ := d.AddVertex(i*10)
-			id2, _ := d.AddVertex(i*10+1)
-			d.AddEdge(id1, id2)
-			size, err := d.GetSize()
-			if err != nil {
-				t.Errorf("failed to GetSize(): %v", err)
-			}
-			if size != 0 {
-				t.Errorf("GetSize() = %d, want %d", size, 0)
-			}
-			if int(size) != i {
-				t.Errorf("GetSize() = %d, want %d", size, 1)
-			}
+	for i := 1; i <= 9; i++ {
+		id1, _ := d.AddVertex(i * 10)
+		id2, _ := d.AddVertex(i*10 + 1)
+		d.AddEdge(id1, id2)
+		size, err := d.GetSize()
+		if err != nil {
+			t.Errorf("failed to GetSize(): %v", err)
 		}
-	*/
+		if int(size) != i {
+			t.Errorf("GetSize() = %d, want %d", size, i)
+		}
+	}
+
 }
 
 /*
@@ -301,79 +451,7 @@ func DeleteVertexTest(d DAG, t *testing.T) {
 	}
 }
 
-func AddEdgeTest(d DAG, t *testing.T) {
-	k0, _ := d.AddVertex(0)
-	k1, _ := d.AddVertex(1)
-	k2, _ := d.AddVertex(2)
-	k3, _ := d.AddVertex(3)
 
-	// add a single edge and inspect the graph
-	_ = d.AddEdge(k1, k2)
-	if children, _ := d.GetChildren(k1); len(children) != 1 {
-		t.Errorf("GetChildren(k1) = %d, want 1", len(children))
-	}
-	if parents, _ := d.GetParents(k2); len(parents) != 1 {
-		t.Errorf("GetParents(k2) = %d, want 1", len(parents))
-	}
-	if leaves, _ := d.GetLeaves(); len(leaves) != 3 {
-		t.Errorf("GetLeaves() = %d, want 3", len(leaves))
-	}
-	if roots, _ := d.GetRoots(); len(roots) != 3 {
-		t.Errorf("GetRoots() = %d, want 3", len(roots))
-	}
-	if vertices, _ := d.GetDescendants(k1); len(vertices) != 1 {
-		t.Errorf("GetDescendants(k1) = %d, want 1", len(vertices))
-	}
-	if vertices, _ := d.GetAncestors(k2); len(vertices) != 1 {
-		t.Errorf("GetAncestors(k2) = %d, want 1", len(vertices))
-	}
-
-	err := d.AddEdge(k2, k3)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if vertices, _ := d.GetDescendants(k1); len(vertices) != 2 {
-		t.Errorf("GetDescendants(k1) = %d, want 2", len(vertices))
-	}
-	if vertices, _ := d.GetAncestors(k3); len(vertices) != 2 {
-		t.Errorf("GetAncestors(k3) = %d, want 2", len(vertices))
-	}
-
-	_ = d.AddEdge(k0, k1)
-	if vertices, _ := d.GetDescendants(k0); len(vertices) != 3 {
-		t.Errorf("GetDescendants(k0) = %d, want 3", len(vertices))
-	}
-	if vertices, _ := d.GetAncestors(k3); len(vertices) != 3 {
-		t.Errorf("GetAncestors(k3) = %d, want 3", len(vertices))
-	}
-
-	// loop
-	errLoopSrcSrc := d.AddEdge(k1, k1)
-	if ! IsSrcDstEqualError(errLoopSrcSrc) {
-		t.Errorf("AddEdge(k1, k1) = '%v', want loop error", errLoopSrcSrc)
-	}
-
-	errLoopDstSrc := d.AddEdge(k2, k1)
-	if ! IsLoopError(errLoopDstSrc) {
-		t.Errorf("AddEdge(k2, k1) = '%v', want loop error", errLoopDstSrc)
-	}
-
-	// duplicate
-	errDuplicate := d.AddEdge(k1, k2)
-	if ! IsDuplicateEdgeError(errDuplicate) {
-		t.Errorf("AddEdge(k1, k2) = '%v', want duplicate edge error", errDuplicate)
-	}
-
-	// empty
-	errEmptySrc := d.AddEdge("", k2)
-	if ! IsEmptyIDError(errEmptySrc) {
-		t.Errorf("AddEdge(\"\", k2) = '%v', want empty key error", errEmptySrc)
-	}
-	errEmptyDst := d.AddEdge(k1, "")
-	if ! IsEmptyIDError(errEmptyDst) {
-		t.Errorf("AddEdge(k1, \"\") = '%v', want empty key error", errEmptyDst)
-	}
-}
 
 func DeleteEdgeTest(d DAG, t *testing.T) {
 

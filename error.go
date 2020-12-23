@@ -3,6 +3,7 @@ package arangodag
 import (
 	"errors"
 	"fmt"
+	"github.com/arangodb/go-driver"
 )
 
 // Error constants
@@ -13,10 +14,10 @@ const (
 	ErrDuplicateID = 1202
 	ErrUnknownID   = 1203
 
-	//ErrDuplicateEdge  = 1301
-	//ErrUnknownEdge    = 1301
-	//ErrLoop           = 1302
-	//ErrSrcDstEqual    = 1303
+	ErrDuplicateEdge = 1301
+	ErrUnknownEdge   = 1301
+	ErrLoop          = 1302
+	ErrSrcDstEqual   = 1303
 
 	ErrArango = 1401
 )
@@ -64,8 +65,8 @@ func (e Error) Is(target error) bool {
 	return e.ErrorNum == t.ErrorNum && t.IsDAGError
 }
 
-// IsErrorWithErrorNum returns true, if the given error is a DAG
-// error with an error number equal to the given one.
+// IsErrorWithErrorNum returns true, if the given error is a DAG error with an
+// error number equal to the given one.
 func IsErrorWithErrorNum(err error, num int) bool {
 	return errors.Is(err, NewError(num, ""))
 }
@@ -76,8 +77,8 @@ func VertexNilError() Error {
 	return NewError(ErrVertexNil, "don't know what to do with 'nil'")
 }
 
-// IsVertexNilError returns true, if the given error is a DAG error
-// with an error number equal to ErrVertexNil.
+// IsVertexNilError returns true, if the given error is a DAG error with an error
+// number equal to ErrVertexNil.
 func IsVertexNilError(err error) bool {
 	return IsErrorWithErrorNum(err, ErrVertexNil)
 }
@@ -88,90 +89,105 @@ func DuplicateIDError(id string) Error {
 	return NewError(ErrDuplicateID, "'%s' is already known", id)
 }
 
-// IsDuplicateIDError returns true, if the given error is a DAG error
-// with an error number equal to ErrDuplicateID.
+// IsDuplicateIDError returns true, if the given error is a DAG error with an
+// error number equal to ErrDuplicateID.
 func IsDuplicateIDError(err error) bool {
 	return IsErrorWithErrorNum(err, ErrDuplicateID)
 }
 
-// EmptyIDError creates a new DAG error with an error number equal to
-// ErrEmptyID and an appropriate error message.
+// EmptyIDError creates a new DAG error with an error number equal to ErrEmptyID
+// and an appropriate error message.
 func EmptyIDError() Error {
 	return NewError(ErrEmptyID, "id is empty")
 }
 
-// IsEmptyIDError returns true, if the given error is a DAG error
-// with an error number equal to ErrEmptyID.
+// IsEmptyIDError returns true, if the given error is a DAG error with an error
+// number equal to ErrEmptyID.
 func IsEmptyIDError(err error) bool {
 	return IsErrorWithErrorNum(err, ErrEmptyID)
 }
 
-// IsUnknownIDError returns true, if the given error is a DAG error
-// with an error number equal to ErrUnknownID.
+// UnknownIDError creates a new DAG error with an error number equal to
+// ErrUnknownID and an appropriate error message.
+func UnknownIDError(id string) Error {
+	return NewError(ErrUnknownID, "'%s' is unknown", id)
+}
+
+// IsUnknownIDError returns true, if the given error is a DAG error with an error
+// number equal to ErrUnknownID.
 func IsUnknownIDError(err error) bool {
 	return IsErrorWithErrorNum(err, ErrUnknownID)
 }
 
-// NewUnknownKeyError creates a new DAG error with an error number equal to
-// ErrUnknownID and an appropriate error message.
-func NewUnknownKeyError(key string) Error {
-	return NewError(ErrUnknownID, "'%s' is unknown", key)
+// ArangoError creates a new DAG error with an error number equal to ErrArango
+// and an appropriate error message. The Arango error is thereby wrapped.
+func ArangoError(err error) Error {
+	e := NewError(ErrArango, "Arango error")
+	e.Err = err
+	return e
 }
 
-/*
-
-
-
-// IsLoopError returns true, if the given error is a DAG error
-// with an error number equal to ErrLoop.
-func IsLoopError(err error) bool {
-	return IsErrorWithErrorNum(err, ErrLoop)
+// IsAragoError returns true, if the given error is a DAG error with an error
+// number equal to ErrArango.
+func IsAragoError(err error) bool {
+	return IsErrorWithErrorNum(err, ErrArango)
 }
 
-// IsDuplicateEdgeError returns true, if the given error is a DAG error
-// with an error number equal to ErrDuplicateEdge.
-func IsDuplicateEdgeError(err error) bool {
-	return IsErrorWithErrorNum(err, ErrDuplicateEdge)
+// IsAragoErrorWithErrorNum returns true, if the given error is a DAG error with
+// an error number equal to ErrArango and the wrapped error is an Arango error
+// with the an error number equal to the given num.
+func IsAragoErrorWithErrorNum(err error, num int) bool {
+	t, ok := err.(Error)
+	if !ok {
+		return false
+	}
+	return t.ErrorNum == ErrArango && driver.IsArangoErrorWithErrorNum(t.Err, num)
 }
 
-// IsUnknownEdgeError returns true, if the given error is a DAG error
-// with an error number equal to ErrUnknownEdge.
-func IsUnknownEdgeError(err error) bool {
-	return IsErrorWithErrorNum(err, ErrUnknownEdge)
+// SrcDstEqualError creates a new DAG error with an error number equal to
+// ErrSrcDstEqual and an appropriate error message.
+func SrcDstEqualError(id string) Error {
+	return NewError(ErrSrcDstEqual, "source and destination are equal ('%s')", id)
 }
 
-// IsSrcDstEqualError returns true, if the given error is a DAG error
-// with an error number equal to ErrSrcDstEqual.
+// IsSrcDstEqualError returns true, if the given error is a DAG error with an
+// error number equal to ErrSrcDstEqual.
 func IsSrcDstEqualError(err error) bool {
 	return IsErrorWithErrorNum(err, ErrSrcDstEqual)
 }
 
-
-
-
-// NewDuplicateEdgeError creates a new DAG error with an error number equal to
+// DuplicateEdgeError creates a new DAG error with an error number equal to
 // ErrDuplicateEdge and an appropriate error message.
-func NewDuplicateEdgeError(src string, dst string) Error {
+func DuplicateEdgeError(src string, dst string) Error {
 	return NewError(ErrDuplicateEdge, "edge between '%s' and '%s' is already known", src, dst)
 }
 
-// NewUnknownEdgeError creates a new DAG error with an error number equal to
+// IsDuplicateEdgeError returns true, if the given error is a DAG error with an
+// error number equal to ErrDuplicateEdge.
+func IsDuplicateEdgeError(err error) bool {
+	return IsErrorWithErrorNum(err, ErrDuplicateEdge)
+}
+
+// UnknownEdgeError creates a new DAG error with an error number equal to
 // ErrUnknownEdge and an appropriate error message.
-func NewUnknownEdgeError(src string, dst string) Error {
+func UnknownEdgeError(src string, dst string) Error {
 	return NewError(ErrUnknownEdge, "edge between '%s' and '%s' is unknown", src, dst)
 }
 
-// NewLoopError creates a new DAG error with an error number equal to
-// ErrLoop and an appropriate error message.
-func NewLoopError(src string, dst string) Error {
+// IsUnknownEdgeError returns true, if the given error is a DAG error with an
+// error number equal to ErrUnknownEdge.
+func IsUnknownEdgeError(err error) bool {
+	return IsErrorWithErrorNum(err, ErrUnknownEdge)
+}
+
+// LoopError creates a new DAG error with an error number equal to ErrLoop and an
+// appropriate error message.
+func LoopError(src string, dst string) Error {
 	return NewError(ErrLoop, "edge between '%s' and '%s' would create a loop", src, dst)
 }
 
-// NewSrcDstEqualError creates a new DAG error with an error number equal to
-// ErrSrcDstEqual and an appropriate error message.
-func NewSrcDstEqualError(key string) Error {
-	return NewError(ErrSrcDstEqual, "source and destination are equal ('%s')", key)
+// IsLoopError returns true, if the given error is a DAG error with an error
+// number equal to ErrLoop.
+func IsLoopError(err error) bool {
+	return IsErrorWithErrorNum(err, ErrLoop)
 }
-
-
-*/
