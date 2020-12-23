@@ -6,6 +6,8 @@ import (
 	"github.com/arangodb/go-driver"
 )
 
+const MaxDepthUnlimited = "10000"
+
 // IDInterface describes the interface a type must implement in order to
 // explicitly specify vertex keys.
 //
@@ -177,6 +179,14 @@ func (d *DAG) AddEdge(srcID, dstID string) (string, error) {
 	if isEdge {
 		return "", DuplicateEdgeError(srcID, dstID)
 	}
+
+	isAncestor, err := d.IsAncestor(srcID, dstID)
+	if err != nil {
+		return "", err
+	}
+	if isAncestor {
+		return "", LoopError(srcID, dstID)
+	}
 	meta, err := d.edges.CreateDocument(context.Background(), arangoEdgeContainer{
 		From: fmt.Sprintf("%s/%s", d.vertices.Name(), srcID),
 		To:   fmt.Sprintf("%s/%s", d.vertices.Name(), dstID),
@@ -217,8 +227,19 @@ func (d *DAG) IsEdge(srcID, dstID string) (bool, error) {
 }
 
 func (d *DAG) IsAncestor(id, ancestorId string) (bool, error) {
+	if id == ancestorId {
+		return false, SrcDstEqualError(id)
+	}
+	if err := d.EnsureVertex(id); err != nil {
+		return false, err
+	}
+	if err := d.EnsureVertex(ancestorId); err != nil {
+		return false, err
+	}
+
 	ctx := driver.WithQueryCount(context.Background())
-	query := fmt.Sprintf("FOR v IN 1..3 INBOUND '%s' GRAPH '%s' FILTER v._id == '%s' RETURN v._key",
+	query := fmt.Sprintf("FOR v IN 1..%s INBOUND '%s' GRAPH '%s' FILTER v._id == '%s' RETURN v._key",
+		MaxDepthUnlimited,
 		fmt.Sprintf("%s/%s", d.vertices.Name(), id),
 		d.graph.Name(),
 		fmt.Sprintf("%s/%s", d.vertices.Name(), ancestorId))
