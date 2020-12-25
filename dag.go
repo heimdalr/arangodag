@@ -159,8 +159,30 @@ func (d *DAG) GetVertex(id string, vertex interface{}) error {
 }
 
 func (d *DAG) DeleteVertex(id string) error {
-	// TODO: implement
-	panic("implement me")
+
+	// see: https://www.arangodb.com/docs/stable/aql/examples-remove-vertex.html
+	ctx := context.Background()
+	query := fmt.Sprintf(`
+LET edgeKeys = (FOR v, e IN 1..1 ANY '%s' GRAPH '%s' RETURN e._key)
+LET r = (FOR key IN edgeKeys REMOVE key IN '%s') 
+REMOVE '%s' IN '%s'`,
+		fmt.Sprintf("%s/%s", d.vertices.Name(), id),
+		d.graph.Name(),
+		d.edges.Name(),
+		id,
+		d.vertices.Name())
+
+	cursor, err := d.edges.Database().Query(ctx, query, nil)
+	if err != nil {
+		return err
+	}
+	defer cursor.Close()
+
+	//ctx := context.Background()
+	//_, err := d.vertices.RemoveDocument(ctx, id)
+	//return err
+
+	return nil
 }
 
 type arangoEdgeContainer struct {
@@ -172,6 +194,8 @@ type arangoEdgeContainer struct {
 // error, if srcID or dstID are empty or unknown, if the edge
 // already exists, or if the new edge would create a loop.
 func (d *DAG) AddEdge(srcID, dstID string) (string, error) {
+
+	// prevent duplicate edges
 	isEdge, err := d.IsEdge(srcID, dstID)
 	if err != nil {
 		return "", err
@@ -180,6 +204,7 @@ func (d *DAG) AddEdge(srcID, dstID string) (string, error) {
 		return "", DuplicateEdgeError(srcID, dstID)
 	}
 
+	// prevent loops
 	isAncestor, err := d.IsAncestor(srcID, dstID)
 	if err != nil {
 		return "", err
@@ -197,17 +222,10 @@ func (d *DAG) AddEdge(srcID, dstID string) (string, error) {
 	return meta.Key, nil
 }
 
-// IsEdge returns true, if there is an edge between srcID and dstID. IsEdge
-// returns an error, if srcID or dstID are empty, unknown, or the same.
+// IsEdge returns true, if there is an edge between srcID and dstID.
 func (d *DAG) IsEdge(srcID, dstID string) (bool, error) {
-	if srcID == dstID {
-		return false, SrcDstEqualError(srcID)
-	}
-	if err := d.EnsureVertex(srcID); err != nil {
-		return false, err
-	}
-	if err := d.EnsureVertex(dstID); err != nil {
-		return false, err
+	if srcID == "" || dstID == "" {
+		return false, EmptyIDError()
 	}
 	ctx := driver.WithQueryCount(context.Background())
 	query := fmt.Sprintf(

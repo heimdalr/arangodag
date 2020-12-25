@@ -183,6 +183,43 @@ func TestDAG_GetOrder(t *testing.T) {
 	}
 }
 
+func TestDAG_DeleteVertex(t *testing.T) {
+	d := someNewDag(t)
+	k0, _ := d.AddVertex(0)
+	err := d.DeleteVertex(k0)
+	if err != nil {
+		t.Fatalf("failed to DeleteVertex(): %v", err)
+	}
+	// empty
+	errEmpty := d.DeleteVertex("")
+	if errEmpty == nil {
+		t.Error("want error, got nil")
+	}
+
+	// unknown
+	errUnknown := d.DeleteVertex(k0)
+	if errUnknown == nil {
+		t.Error("want error, got nil")
+	}
+
+	k0, _ = d.AddVertex(0)
+	k1, _ := d.AddVertex(1)
+	d.AddEdge(k0, k1)
+	isEdge, _ := d.IsEdge(k0, k1)
+	if !isEdge {
+		t.Fatal("want true, got false")
+	}
+	errEdge := d.DeleteVertex(k0)
+	if errEdge != nil {
+		t.Fatalf("failed to DeleteVertex(): %v", errEdge)
+	}
+	isEdge, _ = d.IsEdge(k0, k1)
+	if isEdge {
+		t.Error("want false, got true")
+	}
+
+}
+
 func TestDAG_IsAncestor(t *testing.T) {
 	d := someNewDag(t)
 	k0, _ := d.AddVertex(0)
