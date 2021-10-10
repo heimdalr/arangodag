@@ -19,5 +19,4 @@ stop_db:
 test:
 	go test -v ./...
 
-
-.PHONY: test
+.PHONY: start_db stop_db test
