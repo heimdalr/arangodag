@@ -245,6 +245,20 @@ func TestDAG_IsEdge(t *testing.T) {
 	if errAddEdgeUnknown == nil {
 		t.Errorf("AddEdge() succeeded, want error")
 	}
+
+	// loop
+	errAddEdgeLoop := d.AddEdge(k2, k1)
+	if errAddEdgeLoop == nil {
+		t.Errorf("AddEdge() succeeded, want error")
+	}
+
+	// loop self
+	errAddEdgeLoopSelf := d.AddEdge(k2, k2)
+	if errAddEdgeLoopSelf == nil {
+		t.Errorf("AddEdge() succeeded, want error")
+	}
+
+
 }
 
 func TestDAG_GetSize(t *testing.T) {
@@ -269,6 +283,42 @@ func TestDAG_GetSize(t *testing.T) {
 			t.Errorf("GetSize() = %d, want %d", size, 1)
 		}
 	}
+}
+
+
+func TestDAG_GetPath(t *testing.T) {
+	d := someNewDag(t)
+	_, _ = d.AddVertex(idVertex{"0"})
+	_, _ = d.AddVertex(idVertex{"1"})
+	_, _ = d.AddVertex(idVertex{"2"})
+	_, _ = d.AddVertex(idVertex{"3"})
+	_, _ = d.AddVertex(idVertex{"4"})
+	_ = d.AddEdge("0", "1")
+	_ = d.AddEdge("1", "2")
+	_ = d.AddEdge("2", "3")
+	_ = d.AddEdge("3", "4")
+
+	// path exists
+	path, err := d.GetPath("0", "4")
+	if err != nil {
+		t.Errorf("failed to GetPath(): %v", err)
+	}
+	want := []string{"0", "1", "2", "3", "4"}
+	if deep.Equal(path, want) != nil {
+		t.Errorf("GetPath() = %v, want %v", path, want)
+	}
+
+	// path doesn't exist
+	_, _ = d.AddVertex(idVertex{"5"})
+	path2, err2 := d.GetPath("0", "5")
+	if err2 != nil {
+		t.Errorf("failed to GetPath(): %v", err2)
+	}
+	var want2 []string
+	if deep.Equal(path2, want2) != nil {
+		t.Errorf("GetPath() = %v, want %v", path2, want2)
+	}
+
 }
 
 /*

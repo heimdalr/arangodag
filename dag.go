@@ -3,7 +3,6 @@ package arangodag
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/arangodb/go-driver"
 )
 
@@ -102,6 +101,15 @@ func (d *DAG) getVertex(key string, vertex interface{}) (string, error) {
 	return string(meta.ID), nil
 }
 
+// GetOrder returns the number of vertices in the graph.
+func (d *DAG) GetOrder() (uint64, error) {
+	count, err := d.vertices.Count(context.Background())
+	if err != nil {
+		return 0, err
+	}
+	return uint64(count), nil
+
+}
 
 type edge struct{
 	From string `json:"_from"`
@@ -130,6 +138,18 @@ func (d *DAG) AddEdge(src, dst string) error {
 	}
 	if id != "" {
 		return errors.New("duplicate edge")
+	}
+
+	// prevent loops
+	path, errSrc := d.getPath(dstId, srcId)
+	if errSrc != nil {
+		return errSrc
+	}
+	if path != nil {
+		if len(path) == 1 {
+			return errors.New("self loop")
+		}
+		return errors.New("loop")
 	}
 
 	// add edge
@@ -163,11 +183,13 @@ func (d *DAG) IsEdge(src, dst string) (bool, error) {
 
 func (d *DAG) getEdgeId(srcId, dstId string) (string, error) {
 	ctx := context.Background()
-	query := fmt.Sprintf("FOR d IN %s FILTER d._from == @from AND d._to == @to RETURN d", d.edges.Name())
+	query := "FOR d IN @@collection FILTER d._from == @from AND d._to == @to RETURN d"
 	bindVars := map[string]interface{}{
+		"@collection": d.edges.Name(),
 		"from": srcId,
 		"to": dstId,
 	}
+
 	cursor, err := d.db.Query(ctx, query, bindVars)
 	if err != nil {
 		return "", err
@@ -185,18 +207,79 @@ func (d *DAG) getEdgeId(srcId, dstId string) (string, error) {
 }
 
 
-
-
-
-// GetOrder returns the number of vertices in the graph.
-func (d *DAG) GetOrder() (uint64, error) {
-	count, err := d.vertices.Count(context.Background())
-	if err != nil {
-		return 0, err
+func (d *DAG) GetPath(src, dst string) ([]string, error) {
+	srcId, errSrc := d.getVertex(src, nil)
+	if errSrc != nil {
+		return nil, errSrc
 	}
-	return uint64(count), nil
-
+	dstId, errDst := d.getVertex(dst, nil)
+	if errDst != nil {
+		return nil, errDst
+	}
+	path, errPath := d.getPath(srcId, dstId)
+	if errPath != nil {
+		return nil, errPath
+	}
+	if path == nil {
+		return nil, nil
+	}
+	result := make([]string, len(path))
+    for i, x := range path {
+		result[i] = x.Key
+    }
+	return result, nil
 }
+
+func (d *DAG) getPath(srcId, dstId string) ([]driver.DocumentMeta, error) {
+	// FOR v IN 1..10000 OUTBOUND 'test_1633880375782002333/10' test_1633880375782002649 RETURN v
+
+	/*FOR v IN OUTBOUND
+	SHORTEST_PATH 'test_1633880375782002333/10' TO 'test_1633880375782002333/20'
+	test_1633880375782002649
+	RETURN v
+	*/
+
+	/*
+	FOR v IN 1..10000 OUTBOUND 'test_1633880375782002333/10' test_1633880375782002649
+	OPTIONS {
+		bfs: true,
+		uniqueVertices: 'global'
+	}
+	FILTER v._id == 'test_1633880375782002333/20'
+	RETURN v
+	*/
+
+	var result []driver.DocumentMeta
+
+	ctx := context.Background()
+	query := "FOR v IN OUTBOUND SHORTEST_PATH @from TO @to @@collection RETURN v"
+	bindVars := map[string]interface{}{
+		"@collection": d.edges.Name(),
+		"from": srcId,
+		"to": dstId,
+	}
+
+	cursor, err := d.db.Query(ctx, query, bindVars)
+	if err != nil {
+		return result, err
+	}
+	defer cursor.Close()
+	for {
+		var doc edge
+		meta, err := cursor.ReadDocument(ctx, &doc)
+		if driver.IsNoMoreDocuments(err) {
+			break
+		}
+		if err != nil {
+			return result, err
+		}
+		result = append(result, meta)
+	}
+	return result, nil
+}
+
+
+
 
 // GetSize returns the number of edges in the graph.
 func (d *DAG) GetSize() (uint64, error) {
