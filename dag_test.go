@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"github.com/arangodb/go-driver"
 	"github.com/arangodb/go-driver/http"
-	"os"
-
 	"github.com/go-test/deep"
+	"os"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -60,26 +60,24 @@ func TestNewDAG(t *testing.T) {
 }
 
 type idVertex struct {
-	MyID string
-}
-
-// implement the Vertex's interface method Key()
-func (v idVertex) ID() string {
-	return v.MyID
+	Key string `json:"_key"`
 }
 
 func TestDAG_AddVertex(t *testing.T) {
 	d := someNewDag(t)
 
 	// simple vertex
-	_, err := d.AddVertex("1")
+	autoId, err := d.AddVertex(struct{foo string}{foo: "1"})
 	if err != nil {
 		t.Errorf("failed to AddVertex(): %v", err)
+	}
+	if autoId == "" {
+		t.Errorf("want id, got: %v", autoId)
 	}
 
 	// vertex with id
 	id := "1"
-	idReturned, err := d.AddVertex(idVertex{MyID: "1"})
+	idReturned, err := d.AddVertex(idVertex{Key: "1"})
 	if err != nil {
 		t.Fatalf("failed to AddVertex(): %v", err)
 	}
@@ -88,15 +86,15 @@ func TestDAG_AddVertex(t *testing.T) {
 	}
 
 	// duplicate
-	_, errDuplicate := d.AddVertex(idVertex{MyID: "1"})
-	if !IsDuplicateIDError(errDuplicate) {
-		t.Errorf("want DuplicateIDError, got %v", errDuplicate)
+	_, errDuplicate := d.AddVertex(idVertex{Key: "1"})
+	if errDuplicate == nil {
+		t.Errorf("want duplicate Error")
 	}
 
 	// nil
 	_, errNil := d.AddVertex(nil)
-	if !IsVertexNilError(errNil) {
-		t.Errorf("want VertexNilError, got %v", errNil)
+	if errNil == nil {
+		t.Errorf("want nil Error")
 	}
 
 }
@@ -105,26 +103,25 @@ type foobar struct {
 	A string
 	B string
 }
+
 type foobarKey struct {
-	A    string
-	B    string
-	MyID string
+	A string
+	B string
+	Key string `json:"_key"`
 }
 
-func (o foobarKey) ID() string {
-	return o.MyID
-}
 func TestDAG_GetVertex(t *testing.T) {
 	d := someNewDag(t)
 
-	var v int = 1
-	k, _ := d.AddVertex(1)
-	err := d.GetVertex(k, &v)
+	v0 := idVertex{Key: "1"}
+	k, _ := d.AddVertex(v0)
+	var v1 idVertex
+	err := d.GetVertex(k, &v1)
 	if err != nil {
 		t.Errorf("failed to GetVertex(): %v", err)
 	}
-	if v != 1 {
-		t.Errorf("GetVertex() = %v, want %v", v, 1)
+	if deep.Equal(v0, v1) != nil  {
+		t.Errorf("GetVertex() = %v, want %v", v1, v0)
 	}
 
 	// "complex" document without key
@@ -140,7 +137,7 @@ func TestDAG_GetVertex(t *testing.T) {
 	}
 
 	// "complex" document with key
-	v4 := foobarKey{A: "foo", B: "bar", MyID: "myFancyKey"}
+	v4 := foobarKey{A: "foo", B: "bar", Key: "myFancyKey"}
 	var v5 foobarKey
 	k4, _ := d.AddVertex(v4)
 	err = d.GetVertex(k4, &v5)
@@ -152,15 +149,16 @@ func TestDAG_GetVertex(t *testing.T) {
 	}
 
 	// unknown
+	var v idVertex
 	errUnknown := d.GetVertex("foo", v)
-	if !IsUnknownIDError(errUnknown) {
-		t.Errorf("want IsUnknownIDError, got %v", errUnknown)
+	if errUnknown == nil {
+		t.Errorf("want document not found")
 	}
 
 	// empty
 	errEmpty := d.GetVertex("", v)
-	if !IsEmptyIDError(errEmpty) {
-		t.Errorf("want EmptyIDError, got %v", errEmpty)
+	if errEmpty == nil {
+		t.Errorf("want key is empty")
 	}
 }
 
@@ -175,7 +173,7 @@ func TestDAG_GetOrder(t *testing.T) {
 	}
 
 	for i := 1; i <= 10; i++ {
-		_, _ = d.AddVertex(i)
+		_, _ = d.AddVertex(idVertex{Key: strconv.Itoa(i)})
 		order, err = d.GetOrder()
 		if err != nil {
 			t.Errorf("failed to GetOrder(): %v", err)

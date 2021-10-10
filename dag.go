@@ -5,15 +5,6 @@ import (
 	"github.com/arangodb/go-driver"
 )
 
-// IDInterface describes the interface a type must implement in order to
-// explicitly specify vertex keys.
-//
-// Objects of types not implementing this interface will receive automatically
-// generated keys (as of adding them to the graph).
-type IDInterface interface {
-	ID() string
-}
-
 // DAG implements the data structure of the DAG.
 type DAG struct {
 	vertices driver.Collection
@@ -73,49 +64,17 @@ func NewDAG(dbName, vertexCollName, edgeCollName string, client driver.Client) (
 	return &DAG{vertices: vertices, edges: edges, client: client}, nil
 }
 
-type arangoDocContainer struct {
-	Payload interface{} `json:"payload"`
-}
-type arangoDocKeyContainer struct {
-	Key     string      `json:"_key"`
-	Payload interface{} `json:"payload"`
-}
 
 // AddVertex adds the given vertex to the DAG and returns its id. AddVertex
-// returns an error, if the vertex is nil. If the vertex implements the
-// IDInterface, the key will be taken from the vertex (itself). In this case,
-// AddVertex returns an error, if the extracted id is empty or already exists.
+// returns an error, if the vertex is nil. If the vertex contains a `_key` field,
+// this will be used as key. A new key will be created otherwise. If the key is
+// taken from the vertex (itself), an error is returned, if the key already
+// exists.
 func (d *DAG) AddVertex(vertex interface{}) (string, error) {
 
-	// sanity checking
-	if vertex == nil {
-		return "", VertexNilError()
-	}
-
-	var doc interface{}
-	var id string
-	if i, ok := vertex.(IDInterface); ok {
-		id = i.ID()
-		doc = &arangoDocKeyContainer{Payload: vertex, Key: id}
-	} else {
-		doc = &arangoDocContainer{Payload: vertex}
-		id = ""
-	}
-
 	ctx := driver.WithQueryCount(context.Background())
-	meta, err := d.vertices.CreateDocument(ctx, doc)
+	meta, err := d.vertices.CreateDocument(ctx, vertex)
 	if err != nil {
-		if driver.IsArangoErrorWithErrorNum(err, 1210) {
-			return "", DuplicateIDError(id)
-		}
-		if driver.IsArangoError(err) {
-			return "", Error{
-				IsDAGError:   true,
-				ErrorNum:     ErrArango,
-				ErrorMessage: "",
-				Err:          err,
-			}
-		}
 		return "", err
 	}
 	return meta.Key, nil
@@ -124,28 +83,12 @@ func (d *DAG) AddVertex(vertex interface{}) (string, error) {
 // GetVertex returns the vertex with the given id. GetVertex returns an error, if
 // id is empty or unknown.
 func (d *DAG) GetVertex(id string, vertex interface{}) error {
-	if id == "" {
-		return EmptyIDError()
-	}
 
 	ctx := context.Background()
-	doc := arangoDocContainer{Payload: vertex}
-	_, err := d.vertices.ReadDocument(ctx, id, &doc)
+	_, err := d.vertices.ReadDocument(ctx, id, vertex)
 	if err != nil {
-		if driver.IsArangoErrorWithErrorNum(err, 1202) {
-			return NewUnknownKeyError(id)
-		}
-		if driver.IsArangoError(err) {
-			return Error{
-				IsDAGError:   true,
-				ErrorNum:     ErrArango,
-				ErrorMessage: "",
-				Err:          err,
-			}
-		}
 		return err
 	}
-	//vertex = doc.Payload
 	return nil
 }
 
