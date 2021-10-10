@@ -203,12 +203,38 @@ func TestDAG_AddEdge(t *testing.T) {
 	if !isEdge {
 		t.Errorf("IsEdge() = %t, want %t", isEdge, true)
 	}
+	size, errSize := d.GetSize()
+	if errSize != nil {
+		t.Errorf("GetSize() failed: %v", errSize)
+	}
+	if size != 1 {
+		t.Errorf("GetSize() = %d, want 1", size)
+	}
 
 	// adding duplicate
 	errAddEdgeDuplicate := d.AddEdge(k1, k2)
 	if errAddEdgeDuplicate == nil {
 		t.Errorf("AddEdge() succeeded, want error")
 	}
+
+	// adding edge for unknown vertex
+	errAddEdgeUnknown := d.AddEdge(k1, "3")
+	if errAddEdgeUnknown == nil {
+		t.Errorf("AddEdge() succeeded, want error")
+	}
+
+	// loop
+	errAddEdgeLoop := d.AddEdge(k2, k1)
+	if errAddEdgeLoop == nil {
+		t.Errorf("AddEdge() succeeded, want error")
+	}
+
+	// loop self
+	errAddEdgeLoopSelf := d.AddEdge(k2, k2)
+	if errAddEdgeLoopSelf == nil {
+		t.Errorf("AddEdge() succeeded, want error")
+	}
+
 }
 
 func TestDAG_IsEdge(t *testing.T) {
@@ -239,26 +265,6 @@ func TestDAG_IsEdge(t *testing.T) {
 	if !isEdge2 {
 		t.Errorf("IsEdge() = %t, want %t", isEdge2, true)
 	}
-
-	// adding edge for unknown vertex
-	errAddEdgeUnknown := d.AddEdge(k1, "3")
-	if errAddEdgeUnknown == nil {
-		t.Errorf("AddEdge() succeeded, want error")
-	}
-
-	// loop
-	errAddEdgeLoop := d.AddEdge(k2, k1)
-	if errAddEdgeLoop == nil {
-		t.Errorf("AddEdge() succeeded, want error")
-	}
-
-	// loop self
-	errAddEdgeLoopSelf := d.AddEdge(k2, k2)
-	if errAddEdgeLoopSelf == nil {
-		t.Errorf("AddEdge() succeeded, want error")
-	}
-
-
 }
 
 func TestDAG_GetSize(t *testing.T) {
@@ -286,7 +292,7 @@ func TestDAG_GetSize(t *testing.T) {
 }
 
 
-func TestDAG_GetPath(t *testing.T) {
+func TestDAG_GetShortestPath(t *testing.T) {
 	d := someNewDag(t)
 	_, _ = d.AddVertex(idVertex{"0"})
 	_, _ = d.AddVertex(idVertex{"1"})
@@ -299,27 +305,93 @@ func TestDAG_GetPath(t *testing.T) {
 	_ = d.AddEdge("3", "4")
 
 	// path exists
-	path, err := d.GetPath("0", "4")
+	path, err := d.GetShortestPath("0", "4")
 	if err != nil {
-		t.Errorf("failed to GetPath(): %v", err)
+		t.Errorf("failed to GetShortestPath(): %v", err)
 	}
 	want := []string{"0", "1", "2", "3", "4"}
 	if deep.Equal(path, want) != nil {
-		t.Errorf("GetPath() = %v, want %v", path, want)
+		t.Errorf("GetShortestPath() = %v, want %v", path, want)
 	}
 
 	// path doesn't exist
 	_, _ = d.AddVertex(idVertex{"5"})
-	path2, err2 := d.GetPath("0", "5")
+	path2, err2 := d.GetShortestPath("0", "5")
 	if err2 != nil {
-		t.Errorf("failed to GetPath(): %v", err2)
+		t.Errorf("failed to GetShortestPath(): %v", err2)
 	}
 	var want2 []string
 	if deep.Equal(path2, want2) != nil {
-		t.Errorf("GetPath() = %v, want %v", path2, want2)
+		t.Errorf("GetShortestPath() = %v, want %v", path2, want2)
 	}
 
+	// alternate path
+	_ = d.AddEdge("0", "3")
+	path3, err3 := d.GetShortestPath("0", "4")
+	if err3 != nil {
+		t.Errorf("failed to GetShortestPath(): %v", err3)
+	}
+	want3 := []string{"0", "3", "4"}
+	if deep.Equal(path3, want3) != nil {
+		t.Errorf("GetShortestPath() = %v, want %v", path3, want3)
+	}
+
+	// 2 shortest paths pick the BFS first one
+	_ = d.AddEdge("1", "4")
+	path4, err4 := d.GetShortestPath("0", "4")
+	if err4 != nil {
+		t.Errorf("failed to GetShortestPath(): %v", err4)
+	}
+	want4 := []string{"0", "1", "4"}
+	if deep.Equal(path4, want4) != nil {
+		t.Errorf("GetShortestPath() = %v, want %v", path4, want4)
+	}
 }
+
+
+func TestDAG_GetLeaves(t *testing.T) {
+	d := someNewDag(t)
+	_, _ = d.AddVertex(idVertex{"0"})
+
+	// start is leave
+	leaves, err := d.GetLeaves("0")
+	if err != nil {
+		t.Errorf("failed to GetLeaves(): %v", err)
+	}
+	want := []string{"0"}
+	if deep.Equal(leaves, want) != nil {
+		t.Errorf("GetLeaves() = %v, want %v", leaves, want)
+	}
+
+	_, _ = d.AddVertex(idVertex{"1"})
+	_ = d.AddEdge("0", "1")
+
+	// one "real" leave
+	leaves2, err2 := d.GetLeaves("0")
+	if err2 != nil {
+		t.Errorf("failed to GetLeaves(): %v", err2)
+	}
+	want2 := []string{"1"}
+	if deep.Equal(leaves2, want2) != nil {
+		t.Errorf("GetLeaves() = %v, want %v", leaves2, want2)
+	}
+
+	// 10 leaves
+	for i := 2; i < 10; i++ {
+		dstKey := strconv.Itoa(i)
+		_, _ = d.AddVertex(idVertex{dstKey})
+		_ = d.AddEdge("0", dstKey)
+	}
+	leaves3, err3 := d.GetLeaves("0")
+	if err3 != nil {
+		t.Errorf("failed to GetLeaves(): %v", err3)
+	}
+	want3 := []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}
+	if deep.Equal(leaves3, want3) != nil {
+		t.Errorf("GetLeaves() = %v, want %v", leaves3, want3)
+	}
+}
+
 
 /*
 func DeleteVertexTest(d DAG, t *testing.T) {

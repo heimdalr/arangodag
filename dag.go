@@ -141,7 +141,7 @@ func (d *DAG) AddEdge(src, dst string) error {
 	}
 
 	// prevent loops
-	path, errSrc := d.getPath(dstId, srcId)
+	path, errSrc := d.getShortestPath(dstId, srcId)
 	if errSrc != nil {
 		return errSrc
 	}
@@ -206,8 +206,9 @@ func (d *DAG) getEdgeId(srcId, dstId string) (string, error) {
 	return string(meta.ID), nil
 }
 
-
-func (d *DAG) GetPath(src, dst string) ([]string, error) {
+// GetShortestPath returns the shortest path between src and dst. GetShortestPath returns nil if
+// there is no such path.
+func (d *DAG) GetShortestPath(src, dst string) ([]string, error) {
 	srcId, errSrc := d.getVertex(src, nil)
 	if errSrc != nil {
 		return nil, errSrc
@@ -216,7 +217,7 @@ func (d *DAG) GetPath(src, dst string) ([]string, error) {
 	if errDst != nil {
 		return nil, errDst
 	}
-	path, errPath := d.getPath(srcId, dstId)
+	path, errPath := d.getShortestPath(srcId, dstId)
 	if errPath != nil {
 		return nil, errPath
 	}
@@ -230,25 +231,7 @@ func (d *DAG) GetPath(src, dst string) ([]string, error) {
 	return result, nil
 }
 
-func (d *DAG) getPath(srcId, dstId string) ([]driver.DocumentMeta, error) {
-	// FOR v IN 1..10000 OUTBOUND 'test_1633880375782002333/10' test_1633880375782002649 RETURN v
-
-	/*FOR v IN OUTBOUND
-	SHORTEST_PATH 'test_1633880375782002333/10' TO 'test_1633880375782002333/20'
-	test_1633880375782002649
-	RETURN v
-	*/
-
-	/*
-	FOR v IN 1..10000 OUTBOUND 'test_1633880375782002333/10' test_1633880375782002649
-	OPTIONS {
-		bfs: true,
-		uniqueVertices: 'global'
-	}
-	FILTER v._id == 'test_1633880375782002333/20'
-	RETURN v
-	*/
-
+func (d *DAG) getShortestPath(srcId, dstId string) ([]driver.DocumentMeta, error) {
 	var result []driver.DocumentMeta
 
 	ctx := context.Background()
@@ -278,9 +261,6 @@ func (d *DAG) getPath(srcId, dstId string) ([]driver.DocumentMeta, error) {
 	return result, nil
 }
 
-
-
-
 // GetSize returns the number of edges in the graph.
 func (d *DAG) GetSize() (uint64, error) {
 	count, err := d.edges.Count(context.Background())
@@ -290,38 +270,61 @@ func (d *DAG) GetSize() (uint64, error) {
 	return uint64(count), nil
 }
 
-/*
-func (d *DAG) GetLeaves() (map[string]struct{}, error) {
-	// TODO: use bind variables
-	query := fmt.Sprintf("FOR d IN %s RETURN d", d.vertices.Name())
-	db := d.vertices.Database()
-	cursor, err := db.Query(nil, query, nil)
-	if err != nil {
-		return nil, err
+// GetLeaves returns the leaves below src. If src is itself a leave it returns
+// src (i.e. if src exists, GetLeaves returns at least one leave).
+func (d *DAG) GetLeaves(src string) ([]string, error) {
+	srcId, errSrc := d.getVertex(src, nil)
+	if errSrc != nil {
+		return nil, errSrc
 	}
-	defer cursor.Close()
-
-	leaves := make(map[string]struct{})
-	var i map[string]interface{}
-	for {
-		meta, err := cursor.ReadDocument(nil, &i)
-		if driver.IsNoMoreDocuments(err) {
-			break
-		} else if err != nil {
-			return nil, err
-		}
-
-		childCount, err := d.getChildCount(meta.ID)
-		if err != nil {
-			return nil, err
-		}
-		if childCount == 0 {
-			leaves[meta.Key] = struct{}{}
-		}
+	leaves, errLeaves := d.getLeaves(srcId)
+	if errLeaves != nil {
+		return nil, errLeaves
 	}
-	return leaves, nil
+	if leaves == nil {
+		return nil, nil
+	}
+	result := make([]string, len(leaves))
+	for i, x := range leaves {
+		result[i] = x.Key
+	}
+	return result, nil
 }
 
+func (d *DAG) getLeaves(srcId string) ([]driver.DocumentMeta, error) {
+
+	var result []driver.DocumentMeta
+
+	ctx := context.Background()
+	query := "FOR v IN 0..10000 OUTBOUND @from @@collection " +
+				"FILTER LENGTH(FOR vv IN OUTBOUND v @@collection LIMIT 1 RETURN 1) == 0 " +
+				"RETURN v"
+	bindVars := map[string]interface{}{
+		"@collection": d.edges.Name(),
+		"from": srcId,
+	}
+
+	cursor, err := d.db.Query(ctx, query, bindVars)
+	if err != nil {
+		return result, err
+	}
+	defer cursor.Close()
+	var vertex driver.DocumentMeta
+	for {
+		meta, err := cursor.ReadDocument(ctx, &vertex)
+		if driver.IsNoMoreDocuments(err) {
+			break
+		}
+		if err != nil {
+			return result, err
+		}
+		result = append(result, meta)
+	}
+	return result, nil
+}
+
+
+/*
 func (d *DAG) getChildCount(id driver.DocumentID) (uint64, error) {
 	// TODO: use bind variables
 	ctx := driver.WithQueryCount(context.Background())
@@ -405,7 +408,6 @@ func (d *DAG) GetVertices() (map[string]struct{}, error) {
 
 
 
-/*
 func (d *DAG) DeleteVertex(key string) error {
 	panic("implement me")
 }
