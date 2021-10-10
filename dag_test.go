@@ -184,6 +184,69 @@ func TestDAG_GetOrder(t *testing.T) {
 	}
 }
 
+func TestDAG_AddEdge(t *testing.T) {
+	d := someNewDag(t)
+	k1, _ := d.AddVertex(idVertex{"0"})
+	k2, _ := d.AddVertex(idVertex{"1"})
+
+	// adding edge
+	errAddEdge := d.AddEdge(k1, k2)
+	if errAddEdge != nil {
+		t.Errorf("AddEdge() failed: %v", errAddEdge)
+	}
+
+	// after adding edge
+	isEdge, errIsEdge := d.IsEdge(k1, k2)
+	if errIsEdge != nil {
+		t.Errorf("IsEdge() failed: %v", errIsEdge)
+	}
+	if !isEdge {
+		t.Errorf("IsEdge() = %t, want %t", isEdge, true)
+	}
+
+	// adding duplicate
+	errAddEdgeDuplicate := d.AddEdge(k1, k2)
+	if errAddEdgeDuplicate == nil {
+		t.Errorf("AddEdge() succeeded, want error")
+	}
+}
+
+func TestDAG_IsEdge(t *testing.T) {
+	d := someNewDag(t)
+	k1, _ := d.AddVertex(idVertex{"0"})
+	k2, _ := d.AddVertex(idVertex{"1"})
+
+	// before adding the edge
+	isEdge, errIsEdge := d.IsEdge(k1, k2)
+	if errIsEdge != nil {
+		t.Errorf("IsEdge() failed: %v", errIsEdge)
+	}
+	if isEdge {
+		t.Errorf("IsEdge() = %t, want %t", isEdge, false)
+	}
+
+	// adding edge
+	errAddEdge := d.AddEdge(k1, k2)
+	if errAddEdge != nil {
+		t.Errorf("AddEdge() failed: %v", errAddEdge)
+	}
+
+	// after adding edge
+	isEdge2, errIsEdge2 := d.IsEdge(k1, k2)
+	if errIsEdge2 != nil {
+		t.Errorf("IsEdge() failed: %v", errIsEdge2)
+	}
+	if !isEdge2 {
+		t.Errorf("IsEdge() = %t, want %t", isEdge2, true)
+	}
+
+	// adding edge for unknown vertex
+	errAddEdgeUnknown := d.AddEdge(k1, "3")
+	if errAddEdgeUnknown == nil {
+		t.Errorf("AddEdge() succeeded, want error")
+	}
+}
+
 func TestDAG_GetSize(t *testing.T) {
 	d := someNewDag(t)
 	size, err := d.GetSize()
@@ -194,23 +257,18 @@ func TestDAG_GetSize(t *testing.T) {
 		t.Errorf("GetSize() = %d, want %d", size, 0)
 	}
 
-	/*
 		for i := 1; i <= 9; i++ {
-			id1, _ := d.AddVertex(i*10)
-			id2, _ := d.AddVertex(i*10+1)
+			id1, _ := d.AddVertex(idVertex{strconv.Itoa(i*10)})
+			id2, _ := d.AddVertex(idVertex{strconv.Itoa(i*10+1)})
 			d.AddEdge(id1, id2)
 			size, err := d.GetSize()
 			if err != nil {
 				t.Errorf("failed to GetSize(): %v", err)
 			}
-			if size != 0 {
-				t.Errorf("GetSize() = %d, want %d", size, 0)
-			}
 			if int(size) != i {
 				t.Errorf("GetSize() = %d, want %d", size, 1)
 			}
 		}
-	*/
 }
 
 /*
@@ -803,3 +861,4 @@ func InterfaceTests(t *testing.T, newFn func() dag.DAG, tests []func(dag.DAG, *t
 }
 
 */
+

@@ -2,11 +2,14 @@ package arangodag
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"github.com/arangodb/go-driver"
 )
 
 // DAG implements the data structure of the DAG.
 type DAG struct {
+	db driver.Database
 	vertices driver.Collection
 	edges    driver.Collection
 	client   driver.Client
@@ -61,15 +64,16 @@ func NewDAG(dbName, vertexCollName, edgeCollName string, client driver.Client) (
 		return nil, err
 	}
 
-	return &DAG{vertices: vertices, edges: edges, client: client}, nil
+	return &DAG{db: db, vertices: vertices, edges: edges, client: client}, nil
 }
 
 
-// AddVertex adds the given vertex to the DAG and returns its id. AddVertex
-// returns an error, if the vertex is nil. If the vertex contains a `_key` field,
-// this will be used as key. A new key will be created otherwise. If the key is
-// taken from the vertex (itself), an error is returned, if the key already
-// exists.
+// AddVertex adds the given vertex to the DAG and returns its key.
+//
+// If the given vertex contains a `_key` field, this will be used as key. A new
+// key will be created otherwise.
+//
+// AddVertex prevents duplicate keys.
 func (d *DAG) AddVertex(vertex interface{}) (string, error) {
 
 	ctx := driver.WithQueryCount(context.Background())
@@ -80,17 +84,109 @@ func (d *DAG) AddVertex(vertex interface{}) (string, error) {
 	return meta.Key, nil
 }
 
-// GetVertex returns the vertex with the given id. GetVertex returns an error, if
-// id is empty or unknown.
-func (d *DAG) GetVertex(id string, vertex interface{}) error {
-
-	ctx := context.Background()
-	_, err := d.vertices.ReadDocument(ctx, id, vertex)
+// GetVertex returns the vertex with the given key.
+func (d *DAG) GetVertex(key string, vertex interface{}) error {
+	_, err := d.getVertex(key, vertex)
 	if err != nil {
 		return err
 	}
 	return nil
 }
+
+func (d *DAG) getVertex(key string, vertex interface{}) (string, error) {
+	ctx := context.Background()
+	meta, err := d.vertices.ReadDocument(ctx, key, vertex)
+	if err != nil {
+		return "", err
+	}
+	return string(meta.ID), nil
+}
+
+
+type edge struct{
+	From string `json:"_from"`
+	To string `json:"_to"`
+}
+
+// AddEdge adds an edge from src to dst.
+//
+// AddEdge requires that src and dst exist. AddEdge prevents duplicate edges.
+func (d *DAG) AddEdge(src, dst string) error {
+
+	// ensure vertices exist
+	srcId, errSrc := d.getVertex(src, nil)
+	if errSrc != nil {
+		return errSrc
+	}
+	dstId, errDst := d.getVertex(dst, nil)
+	if errDst != nil {
+		return errDst
+	}
+
+	// prevent duplicate edge
+	id, errEdge := d.getEdgeId(srcId, dstId)
+	if errEdge != nil {
+		return errEdge
+	}
+	if id != "" {
+		return errors.New("duplicate edge")
+	}
+
+	// add edge
+	ctx := context.Background()
+	_, err := d.edges.CreateDocument(ctx, edge{srcId, dstId})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// IsEdge returns true, if an edge from src to dst exists.
+func (d *DAG) IsEdge(src, dst string) (bool, error) {
+	srcId, errSrc := d.getVertex(src, nil)
+	if errSrc != nil {
+		return false, errSrc
+	}
+	dstId, errDst := d.getVertex(dst, nil)
+	if errDst != nil {
+		return false, errDst
+	}
+	id, err := d.getEdgeId(srcId, dstId)
+	if err != nil {
+		return false, err
+	}
+	if id == "" {
+		return false, nil
+	}
+	return true, nil
+}
+
+func (d *DAG) getEdgeId(srcId, dstId string) (string, error) {
+	ctx := context.Background()
+	query := fmt.Sprintf("FOR d IN %s FILTER d._from == @from AND d._to == @to RETURN d", d.edges.Name())
+	bindVars := map[string]interface{}{
+		"from": srcId,
+		"to": dstId,
+	}
+	cursor, err := d.db.Query(ctx, query, bindVars)
+	if err != nil {
+		return "", err
+	}
+	defer cursor.Close()
+	var doc edge
+	meta, err := cursor.ReadDocument(ctx, &doc)
+	if driver.IsNoMoreDocuments(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return string(meta.ID), nil
+}
+
+
+
+
 
 // GetOrder returns the number of vertices in the graph.
 func (d *DAG) GetOrder() (uint64, error) {
