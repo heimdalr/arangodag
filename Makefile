@@ -19,4 +19,7 @@ stop_db:
 test:
 	go test -v ./...
 
+lint:
+	golangci-lint run
+
 .PHONY: start_db stop_db test

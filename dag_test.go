@@ -67,7 +67,7 @@ func TestDAG_AddVertex(t *testing.T) {
 	d := someNewDag(t)
 
 	// simple vertex
-	autoId, err := d.AddVertex(struct{foo string}{foo: "1"})
+	autoId, err := d.AddVertex(struct{ foo string }{foo: "1"})
 	if err != nil {
 		t.Errorf("failed to AddVertex(): %v", err)
 	}
@@ -105,8 +105,8 @@ type foobar struct {
 }
 
 type foobarKey struct {
-	A string
-	B string
+	A   string
+	B   string
 	Key string `json:"_key"`
 }
 
@@ -120,7 +120,7 @@ func TestDAG_GetVertex(t *testing.T) {
 	if err != nil {
 		t.Errorf("failed to GetVertex(): %v", err)
 	}
-	if deep.Equal(v0, v1) != nil  {
+	if deep.Equal(v0, v1) != nil {
 		t.Errorf("GetVertex() = %v, want %v", v1, v0)
 	}
 
@@ -257,18 +257,18 @@ func TestDAG_GetSize(t *testing.T) {
 		t.Errorf("GetSize() = %d, want %d", size, 0)
 	}
 
-		for i := 1; i <= 9; i++ {
-			id1, _ := d.AddVertex(idVertex{strconv.Itoa(i*10)})
-			id2, _ := d.AddVertex(idVertex{strconv.Itoa(i*10+1)})
-			d.AddEdge(id1, id2)
-			size, err := d.GetSize()
-			if err != nil {
-				t.Errorf("failed to GetSize(): %v", err)
-			}
-			if int(size) != i {
-				t.Errorf("GetSize() = %d, want %d", size, 1)
-			}
+	for i := 1; i <= 9; i++ {
+		id1, _ := d.AddVertex(idVertex{strconv.Itoa(i * 10)})
+		id2, _ := d.AddVertex(idVertex{strconv.Itoa(i*10 + 1)})
+		_ = d.AddEdge(id1, id2)
+		size, err := d.GetSize()
+		if err != nil {
+			t.Errorf("failed to GetSize(): %v", err)
 		}
+		if int(size) != i {
+			t.Errorf("GetSize() = %d, want %d", size, 1)
+		}
+	}
 }
 
 /*
@@ -861,4 +861,3 @@ func InterfaceTests(t *testing.T, newFn func() dag.DAG, tests []func(dag.DAG, *t
 }
 
 */
-
