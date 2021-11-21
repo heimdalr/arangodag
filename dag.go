@@ -323,6 +323,65 @@ func (d *DAG) getLeaves(srcId string) ([]driver.DocumentMeta, error) {
 	return result, nil
 }
 
+// WalkFunc is the type expected by WalkAncestors.
+type WalkFunc func(key string, err error) error
+
+// WalkAncestors walks all ancestors of key and applies the function fn. If bfs
+// is set to true, the traversal will be executed breadth-first.
+func (d *DAG) WalkAncestors(key string, fn WalkFunc, bfs bool) error {
+
+	// get the id of the vertex
+	id, errVertex := d.getVertex(key, nil)
+	if errVertex != nil {
+		return errVertex
+	}
+
+	// compute query options
+	uniqueVertices := "none"
+	order := "dfs"
+	if bfs {
+		order = "bfs"
+		uniqueVertices = "global"
+	}
+
+	// compute the query
+	query := "FOR v IN 1..10000 INBOUND @from @@collection OPTIONS {order: @order, uniqueVertices: @uniqueVertices}" +
+		"RETURN DISTINCT v"
+	bindVars := map[string]interface{}{
+		"@collection": d.edges.Name(),
+		"from": id,
+		"order": order,
+		"uniqueVertices": uniqueVertices,
+	}
+
+	// execute the query
+	ctx := context.Background()
+	cursor, errQuery := d.db.Query(ctx, query, bindVars)
+	if errQuery != nil {
+		return errQuery
+	}
+	defer cursor.Close()
+
+	// iterate query results
+	var vertex driver.DocumentMeta
+	for {
+		meta, errRead := cursor.ReadDocument(ctx, &vertex)
+		if driver.IsNoMoreDocuments(errRead) {
+			break
+		}
+		if errRead != nil {
+			return errRead
+		}
+
+		// apply function
+		errFn := fn(meta.Key, nil)
+		if errFn != nil {
+			return errFn
+		}
+	}
+	return nil
+}
+
 
 /*
 func (d *DAG) getChildCount(id driver.DocumentID) (uint64, error) {
