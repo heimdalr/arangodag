@@ -456,56 +456,12 @@ func TestDAG_GetLeaves(t *testing.T) {
 	}
 }
 
-
 func TestDAG_GetRoots(t *testing.T) {
 	d := someNewDag(t)
 	_, _ = d.AddVertex(idVertex{"0"})
 
 	// start is root
-	roots, err := d.GetRoots()
-	if err != nil {
-		t.Errorf("failed to GetRoots(): %v", err)
-	}
-	want := []string{"0"}
-	if deep.Equal(roots, want) != nil {
-		t.Errorf("GetRoots() = %v, want %v", roots, want)
-	}
-
-	_, _ = d.AddVertex(idVertex{"1"})
-	_ = d.AddEdge("0", "1")
-
-	// one "real" root
-	roots2, err2 := d.GetRoots()
-	if err2 != nil {
-		t.Errorf("failed to GetRoots(): %v", err2)
-	}
-	want2 := []string{"0"}
-	if deep.Equal(roots2, want2) != nil {
-		t.Errorf("GetRoots() = %v, want %v", roots2, want2)
-	}
-
-	// 9 roots
-	for i := 2; i < 10; i++ {
-		srcKey := strconv.Itoa(i)
-		_, _ = d.AddVertex(idVertex{srcKey})
-		_ = d.AddEdge(srcKey, "1")
-	}
-	roots3, err3 := d.GetRoots()
-	if err3 != nil {
-		t.Errorf("failed to GetRoots(): %v", err3)
-	}
-	want3 := []string{"0", "2", "3", "4", "5", "6", "7", "8", "9"}
-	if deep.Equal(roots3, want3) != nil {
-		t.Errorf("GetRoots() = %v, want %v", roots3, want3)
-	}
-}
-
-func TestDAG_GetRootsWalker(t *testing.T) {
-	d := someNewDag(t)
-	_, _ = d.AddVertex(idVertex{"0"})
-
-	// start is root
-	chanRoots, chanErrors, chanSignal := d.GetRootsWalker()
+	chanRoots, chanErrors, chanSignal := d.GetRoots()
 	defer close(chanSignal)
 	var collect []string
 	for root := range chanRoots {
@@ -523,7 +479,7 @@ func TestDAG_GetRootsWalker(t *testing.T) {
 	_ = d.AddEdge("0", "1")
 
 	// one "real" root
-	chanRoots1, chanErrors1, chanSignal1 := d.GetRootsWalker()
+	chanRoots1, chanErrors1, chanSignal1 := d.GetRoots()
 	defer close(chanSignal1)
 	var collect1 []string
 	for root := range chanRoots1 {
@@ -543,7 +499,7 @@ func TestDAG_GetRootsWalker(t *testing.T) {
 		_, _ = d.AddVertex(idVertex{srcKey})
 		_ = d.AddEdge(srcKey, "1")
 	}
-	chanRoots2, chanErrors2, chanSignal2 := d.GetRootsWalker()
+	chanRoots2, chanErrors2, chanSignal2 := d.GetRoots()
 	defer close(chanSignal2)
 	var collect2 []string
 	for root := range chanRoots2 {
@@ -558,7 +514,7 @@ func TestDAG_GetRootsWalker(t *testing.T) {
 	}
 
 	// signal ~4/9 roots
-	chanRoots3, chanErrors3, chanSignal3 := d.GetRootsWalker()
+	chanRoots3, chanErrors3, chanSignal3 := d.GetRoots()
 	defer close(chanSignal3)
 	var collect3 []string
 	for root := range chanRoots3 {

@@ -317,27 +317,23 @@ func (d *DAG) getLeaves() ([]driver.DocumentMeta, error) {
 	return result, nil
 }
 
-// GetRoots returns the roots of the DAG.
-func (d *DAG) GetRoots() ([]string, error) {
-	leaves, errLeaves := d.getRoots()
-	if errLeaves != nil {
-		return nil, errLeaves
-	}
-	if leaves == nil {
-		return nil, nil
-	}
-	result := make([]string, len(leaves))
-	for i, x := range leaves {
-		result[i] = x.Key
-	}
-	return result, nil
-}
-
 type myKey struct {
 	Key string `json:"_key,omitempty"`
 }
 
-func (d *DAG) GetRootsWalker() (<-chan string, <-chan error, chan<- bool) {
+// GetRoots returns the roots of the DAG.
+func (d *DAG) GetRoots() (<-chan string, <-chan error, chan<- bool) {
+	query := "FOR v IN @@vertexCollection " +
+		"FILTER LENGTH(FOR vv IN 1..1 INBOUND v @@edgeCollection LIMIT 1 RETURN 1) == 0 " +
+		"RETURN v"
+	bindVars := map[string]interface{}{
+		"@vertexCollection": d.vertices.Name(),
+		"@edgeCollection":   d.edges.Name(),
+	}
+	return d.walker(query, bindVars)
+}
+
+func (d *DAG) walker(query string, bindVars map[string]interface{}) (<-chan string, <-chan error, chan<- bool) {
 
 	chanRoots := make(chan string)
 	chanErrors := make(chan error)
@@ -347,13 +343,6 @@ func (d *DAG) GetRootsWalker() (<-chan string, <-chan error, chan<- bool) {
 		defer close(chanErrors)
 		defer close(chanRoots)
 		ctx := context.Background()
-		query := "FOR v IN @@vertexCollection " +
-			"FILTER LENGTH(FOR vv IN 1..1 INBOUND v @@edgeCollection LIMIT 1 RETURN 1) == 0 " +
-			"RETURN v"
-		bindVars := map[string]interface{}{
-			"@vertexCollection": d.vertices.Name(),
-			"@edgeCollection":   d.edges.Name(),
-		}
 		cursor, err := d.db.Query(ctx, query, bindVars)
 		if err != nil {
 			chanErrors <- err
