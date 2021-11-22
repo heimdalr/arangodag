@@ -362,51 +362,55 @@ func TestDAG_WalkAncestors(t *testing.T) {
 	_ = d.AddEdge("3", "4")
 
 
+	// simple chain BFS
 	var collect []string
-
-	d.WalkAncestors("4", func(key string, err error) error {
+	_ = d.WalkAncestors("4", func(key string, err error) error {
 		collect = append(collect, key)
 		return nil
 	}, false)
-
 	want := []string{"3", "2", "1", "0"}
 	if deep.Equal(collect, want) != nil {
 		t.Errorf("WalkAncestors() = %v, want %v", collect, want)
 	}
 
 
+	// two parents BFS
 	var collect2 []string
-
 	key, _ := d.AddVertex(idVertex{"0a"})
 	_ = d.AddEdge(key, "1")
-
-	d.WalkAncestors("4", func(key string, err error) error {
+	_ = d.WalkAncestors("4", func(key string, err error) error {
 		collect2 = append(collect2, key)
 		return nil
 	}, false)
-
-	want2 := []string{"3", "2", "1", "0", "0a"}
+	want2 := []string{"3", "2", "1", "0a", "0"}
 	if deep.Equal(collect2, want2) != nil {
 		t.Errorf("WalkAncestors() = %v, want %v", collect2, want2)
 	}
 
-
+	// rhombus BFS
 	var collect3 []string
-
 	key, _ = d.AddVertex(idVertex{"2a"})
 	_ = d.AddEdge("1", key)
 	_ = d.AddEdge(key, "3")
-
-	d.WalkAncestors("4", func(key string, err error) error {
+	_ = d.WalkAncestors("4", func(key string, err error) error {
 		collect3 = append(collect3, key)
 		return nil
-	}, true)
-
+	}, false)
 	want3 := []string{"3", "2a", "2", "1", "0a", "0"}
 	if deep.Equal(collect3, want3) != nil {
 		t.Errorf("WalkAncestors() = %v, want %v", collect3, want3)
 	}
 
+	// rhombus DFS
+	var collect4 []string
+	_ = d.WalkAncestors("4", func(key string, err error) error {
+		collect4 = append(collect4, key)
+		return nil
+	}, true)
+	want4 := []string{"3", "2", "1", "0", "0a", "2a"}
+	if deep.Equal(collect4, want4) != nil {
+		t.Errorf("WalkAncestors() = %v, want %v", collect3, want3)
+	}
 }
 
 func TestDAG_GetLeaves(t *testing.T) {

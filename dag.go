@@ -326,9 +326,10 @@ func (d *DAG) getLeaves(srcId string) ([]driver.DocumentMeta, error) {
 // WalkFunc is the type expected by WalkAncestors.
 type WalkFunc func(key string, err error) error
 
-// WalkAncestors walks all ancestors of key and applies the function fn. If bfs
-// is set to true, the traversal will be executed breadth-first.
-func (d *DAG) WalkAncestors(key string, fn WalkFunc, bfs bool) error {
+// WalkAncestors walks all ancestors of key and applies the function fn. If dfs
+// is set to true, the traversal will be executed depth-first (default breadth
+// first).
+func (d *DAG) WalkAncestors(key string, fn WalkFunc, dfs bool) error {
 
 	// get the id of the vertex
 	id, errVertex := d.getVertex(key, nil)
@@ -337,11 +338,11 @@ func (d *DAG) WalkAncestors(key string, fn WalkFunc, bfs bool) error {
 	}
 
 	// compute query options
-	uniqueVertices := "none"
-	order := "dfs"
-	if bfs {
-		order = "bfs"
-		uniqueVertices = "global"
+	uniqueVertices := "global"
+	order := "bfs"
+	if dfs {
+		order = "dfs"
+		uniqueVertices = "none"
 	}
 
 	// compute the query
