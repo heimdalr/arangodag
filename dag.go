@@ -318,6 +318,54 @@ func (d *DAG) getLeaves() ([]driver.DocumentMeta, error) {
 	return result, nil
 }
 
+// GetRoots returns the roots of the DAG.
+func (d *DAG) GetRoots() ([]string, error) {
+	leaves, errLeaves := d.getRoots()
+	if errLeaves != nil {
+		return nil, errLeaves
+	}
+	if leaves == nil {
+		return nil, nil
+	}
+	result := make([]string, len(leaves))
+	for i, x := range leaves {
+		result[i] = x.Key
+	}
+	return result, nil
+}
+
+func (d *DAG) getRoots() ([]driver.DocumentMeta, error) {
+
+	var result []driver.DocumentMeta
+
+	ctx := context.Background()
+	query := "FOR v IN @@vertexCollection " +
+		"FILTER LENGTH(FOR vv IN 1..1 INBOUND v @@edgeCollection LIMIT 1 RETURN 1) == 0 " +
+		"RETURN v"
+	bindVars := map[string]interface{}{
+		"@vertexCollection": d.vertices.Name(),
+		"@edgeCollection": d.edges.Name(),
+	}
+
+	cursor, err := d.db.Query(ctx, query, bindVars)
+	if err != nil {
+		return result, err
+	}
+	defer cursor.Close()
+	var vertex driver.DocumentMeta
+	for {
+		meta, err := cursor.ReadDocument(ctx, &vertex)
+		if driver.IsNoMoreDocuments(err) {
+			break
+		}
+		if err != nil {
+			return result, err
+		}
+		result = append(result, meta)
+	}
+	return result, nil
+}
+
 // WalkFunc is the type expected by WalkAncestors.
 type WalkFunc func(key string, err error) error
 
