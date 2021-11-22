@@ -461,14 +461,14 @@ func TestDAG_GetShortestPath(t *testing.T) {
 
 	// path doesn't exist
 	_, _ = d.AddVertex(idVertex{"5"})
-	chanKeys1, chanErrors1, chanSignal1, errorGSP1 := d.GetShortestPath("0", "4")
+	chanKeys1, chanErrors1, chanSignal1, errorGSP1 := d.GetShortestPath("0", "5")
 	if errorGSP1 != nil {
 		t.Error(errorGSP1)
 	}
 	defer close(chanSignal1)
 	var collect1 []string
 	for key := range chanKeys1 {
-		collect = append(collect1, key)
+		collect1 = append(collect1, key)
 	}
 	for errWalk := range chanErrors1 {
 		t.Error(errWalk)
