@@ -500,7 +500,84 @@ func TestDAG_GetRoots(t *testing.T) {
 	}
 }
 
+func TestDAG_GetRootsWalker(t *testing.T) {
+	d := someNewDag(t)
+	_, _ = d.AddVertex(idVertex{"0"})
 
+	// start is root
+	chanRoots, chanErrors, chanSignal := d.GetRootsWalker()
+	defer close(chanSignal)
+	var collect []string
+	for root := range chanRoots {
+		collect = append(collect, root)
+	}
+	for errWalk := range chanErrors {
+		t.Error(errWalk)
+	}
+	want := []string{"0"}
+	if deep.Equal(collect, want) != nil {
+		t.Errorf("GetRoots() = %v, want %v", collect, want)
+	}
+
+	_, _ = d.AddVertex(idVertex{"1"})
+	_ = d.AddEdge("0", "1")
+
+	// one "real" root
+	chanRoots1, chanErrors1, chanSignal1 := d.GetRootsWalker()
+	defer close(chanSignal1)
+	var collect1 []string
+	for root := range chanRoots1 {
+		collect1 = append(collect1, root)
+	}
+	for errWalk := range chanErrors1 {
+		t.Error(errWalk)
+	}
+	want1 := []string{"0"}
+	if deep.Equal(collect1, want1) != nil {
+		t.Errorf("GetRoots() = %v, want %v", collect1, want1)
+	}
+
+	// 9 roots
+	for i := 2; i < 10; i++ {
+		srcKey := strconv.Itoa(i)
+		_, _ = d.AddVertex(idVertex{srcKey})
+		_ = d.AddEdge(srcKey, "1")
+	}
+	chanRoots2, chanErrors2, chanSignal2 := d.GetRootsWalker()
+	defer close(chanSignal2)
+	var collect2 []string
+	for root := range chanRoots2 {
+		collect2 = append(collect2, root)
+	}
+	for errWalk := range chanErrors2 {
+		t.Error(errWalk)
+	}
+	want2 := []string{"0", "2", "3", "4", "5", "6", "7", "8", "9"}
+	if deep.Equal(collect2, want2) != nil {
+		t.Errorf("GetRoots() = %v, want %v", collect2, want2)
+	}
+
+	// signal ~4/9 roots
+	chanRoots3, chanErrors3, chanSignal3 := d.GetRootsWalker()
+	defer close(chanSignal3)
+	var collect3 []string
+	for root := range chanRoots3 {
+		collect3 = append(collect3, root)
+		if root == "4" {
+			chanSignal3 <- true
+			break
+		}
+	}
+	for errWalk := range chanErrors3 {
+		t.Error(errWalk)
+	}
+	want3 := []string{"0", "2", "3", "4"}
+	if deep.Equal(collect3, want3) != nil {
+		t.Errorf("GetRoots() = %v, want %v", collect3, want3)
+	}
+
+
+}
 /*
 func DeleteVertexTest(d DAG, t *testing.T) {
 

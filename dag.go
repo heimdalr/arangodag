@@ -8,7 +8,7 @@ import (
 
 // DAG implements the data structure of the DAG.
 type DAG struct {
-	db driver.Database
+	db       driver.Database
 	vertices driver.Collection
 	edges    driver.Collection
 	client   driver.Client
@@ -66,7 +66,6 @@ func NewDAG(dbName, vertexCollName, edgeCollName string, client driver.Client) (
 	return &DAG{db: db, vertices: vertices, edges: edges, client: client}, nil
 }
 
-
 // AddVertex adds the given vertex to the DAG and returns its key.
 //
 // If the given vertex contains a `_key` field, this will be used as key. A new
@@ -111,9 +110,9 @@ func (d *DAG) GetOrder() (uint64, error) {
 
 }
 
-type edge struct{
+type myEdge struct {
 	From string `json:"_from"`
-	To string `json:"_to"`
+	To   string `json:"_to"`
 }
 
 // AddEdge adds an edge from src to dst.
@@ -154,7 +153,7 @@ func (d *DAG) AddEdge(src, dst string) error {
 
 	// add edge
 	ctx := context.Background()
-	_, err := d.edges.CreateDocument(ctx, edge{srcId, dstId})
+	_, err := d.edges.CreateDocument(ctx, myEdge{srcId, dstId})
 	if err != nil {
 		return err
 	}
@@ -186,8 +185,8 @@ func (d *DAG) getEdgeId(srcId, dstId string) (string, error) {
 	query := "FOR d IN @@collection FILTER d._from == @from AND d._to == @to RETURN d"
 	bindVars := map[string]interface{}{
 		"@collection": d.edges.Name(),
-		"from": srcId,
-		"to": dstId,
+		"from":        srcId,
+		"to":          dstId,
 	}
 
 	cursor, err := d.db.Query(ctx, query, bindVars)
@@ -195,7 +194,7 @@ func (d *DAG) getEdgeId(srcId, dstId string) (string, error) {
 		return "", err
 	}
 	defer cursor.Close()
-	var doc edge
+	var doc myEdge
 	meta, err := cursor.ReadDocument(ctx, &doc)
 	if driver.IsNoMoreDocuments(err) {
 		return "", nil
@@ -225,9 +224,9 @@ func (d *DAG) GetShortestPath(src, dst string) ([]string, error) {
 		return nil, nil
 	}
 	result := make([]string, len(path))
-    for i, x := range path {
+	for i, x := range path {
 		result[i] = x.Key
-    }
+	}
 	return result, nil
 }
 
@@ -238,8 +237,8 @@ func (d *DAG) getShortestPath(srcId, dstId string) ([]driver.DocumentMeta, error
 	query := "FOR v IN OUTBOUND SHORTEST_PATH @from TO @to @@collection RETURN v"
 	bindVars := map[string]interface{}{
 		"@collection": d.edges.Name(),
-		"from": srcId,
-		"to": dstId,
+		"from":        srcId,
+		"to":          dstId,
 	}
 
 	cursor, err := d.db.Query(ctx, query, bindVars)
@@ -248,7 +247,7 @@ func (d *DAG) getShortestPath(srcId, dstId string) ([]driver.DocumentMeta, error
 	}
 	defer cursor.Close()
 	for {
-		var doc edge
+		var doc myEdge
 		meta, err := cursor.ReadDocument(ctx, &doc)
 		if driver.IsNoMoreDocuments(err) {
 			break
@@ -292,11 +291,11 @@ func (d *DAG) getLeaves() ([]driver.DocumentMeta, error) {
 
 	ctx := context.Background()
 	query := "FOR v IN @@vertexCollection " +
-				"FILTER LENGTH(FOR vv IN 1..1 OUTBOUND v @@edgeCollection LIMIT 1 RETURN 1) == 0 " +
-				"RETURN v"
+		"FILTER LENGTH(FOR vv IN 1..1 OUTBOUND v @@edgeCollection LIMIT 1 RETURN 1) == 0 " +
+		"RETURN v"
 	bindVars := map[string]interface{}{
 		"@vertexCollection": d.vertices.Name(),
-		"@edgeCollection": d.edges.Name(),
+		"@edgeCollection":   d.edges.Name(),
 	}
 
 	cursor, err := d.db.Query(ctx, query, bindVars)
@@ -334,6 +333,56 @@ func (d *DAG) GetRoots() ([]string, error) {
 	return result, nil
 }
 
+type myKey struct {
+	Key string `json:"_key,omitempty"`
+}
+
+func (d *DAG) GetRootsWalker() (<-chan string, <-chan error, chan<- bool) {
+
+	chanRoots := make(chan string)
+	chanErrors := make(chan error)
+	chanSignal := make(chan bool, 1)
+
+	go func() {
+		defer close(chanErrors)
+		defer close(chanRoots)
+		ctx := context.Background()
+		query := "FOR v IN @@vertexCollection " +
+			"FILTER LENGTH(FOR vv IN 1..1 INBOUND v @@edgeCollection LIMIT 1 RETURN 1) == 0 " +
+			"RETURN v"
+		bindVars := map[string]interface{}{
+			"@vertexCollection": d.vertices.Name(),
+			"@edgeCollection":   d.edges.Name(),
+		}
+		cursor, err := d.db.Query(ctx, query, bindVars)
+		if err != nil {
+			chanErrors <- err
+			return
+		}
+		defer cursor.Close()
+
+		var key myKey
+		for {
+			_, errRead := cursor.ReadDocument(ctx, &key)
+			if driver.IsNoMoreDocuments(errRead) {
+				return
+			}
+			if errRead != nil {
+				chanErrors <- errRead
+				continue
+			}
+			select {
+			case <-chanSignal:
+				return
+			default:
+				chanRoots <- key.Key
+			}
+		}
+	}()
+
+	return chanRoots, chanErrors, chanSignal
+}
+
 func (d *DAG) getRoots() ([]driver.DocumentMeta, error) {
 
 	var result []driver.DocumentMeta
@@ -344,7 +393,7 @@ func (d *DAG) getRoots() ([]driver.DocumentMeta, error) {
 		"RETURN v"
 	bindVars := map[string]interface{}{
 		"@vertexCollection": d.vertices.Name(),
-		"@edgeCollection": d.edges.Name(),
+		"@edgeCollection":   d.edges.Name(),
 	}
 
 	cursor, err := d.db.Query(ctx, query, bindVars)
@@ -392,9 +441,9 @@ func (d *DAG) WalkAncestors(key string, fn WalkFunc, dfs bool) error {
 	query := "FOR v IN 1..10000 INBOUND @from @@collection OPTIONS {order: @order, uniqueVertices: @uniqueVertices}" +
 		"RETURN DISTINCT v"
 	bindVars := map[string]interface{}{
-		"@collection": d.edges.Name(),
-		"from": id,
-		"order": order,
+		"@collection":    d.edges.Name(),
+		"from":           id,
+		"order":          order,
 		"uniqueVertices": uniqueVertices,
 	}
 
@@ -425,7 +474,6 @@ func (d *DAG) WalkAncestors(key string, fn WalkFunc, dfs bool) error {
 	}
 	return nil
 }
-
 
 /*
 func (d *DAG) getChildCount(id driver.DocumentID) (uint64, error) {
