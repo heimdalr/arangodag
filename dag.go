@@ -3,7 +3,12 @@ package arangodag
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/arangodb/go-driver"
+)
+
+const (
+	maxDepth = 10000
 )
 
 // DAG implements the data structure of the DAG.
@@ -259,6 +264,19 @@ func (d *DAG) GetShortestPath(srcKey, dstKey string) (<-chan string, <-chan erro
 	return chanKeys, chanErrors, chanSignal, nil
 }
 
+// GetParents returns the keys of all parent vertices of the vertex with the key srcKey.
+//
+// GetParents does not directly return the keys but instead returns 3 channels.
+// The keys may be received from the string-channel. Any errors that occur while
+// querying may be received from the error-channel. And, finally, the
+// bool-channel may be used to prevent further DB-querying by sending true into
+// it.
+//
+// GetParents "immediately" closes the string-channel, if there is no parents.
+func (d *DAG) GetParents(srcKey string) (<-chan string, <-chan error, chan<- bool, error) {
+	return d.getRelatives(srcKey, false, 1, false)
+}
+
 // GetAncestors returns the keys of all ancestor vertices of the vertex with the key srcKey in
 // breadth first order. If dfs is set to true, the traversal will be executed
 // depth-first.
@@ -272,6 +290,26 @@ func (d *DAG) GetShortestPath(srcKey, dstKey string) (<-chan string, <-chan erro
 // GetAncestors "immediately" closes the string-channel, if there is
 // no ancestors.
 func (d *DAG) GetAncestors(srcKey string, dfs bool) (<-chan string, <-chan error, chan<- bool, error) {
+	return d.getRelatives(srcKey, false, maxDepth, dfs)
+}
+
+// GetDescendants returns the keys of all descendant vertices of the vertex with the key srcKey in
+// breadth first order. If dfs is set to true, the traversal will be executed
+// depth-first.
+//
+// GetDescendants does not directly return the keys but instead returns 3 channels. The
+// keys may be received from the string-channel. Any errors that occur while
+// querying may be received from the error-channel. And, finally, the
+// bool-channel may be used to prevent further DB-querying by sending true into
+// it.
+//
+// GetDescendants "immediately" closes the string-channel, if there is
+// no ancestors.
+func (d *DAG) GetDescendants(srcKey string, dfs bool) (<-chan string, <-chan error, chan<- bool, error) {
+	return d.getRelatives(srcKey, true, maxDepth, dfs)
+}
+
+func (d *DAG) getRelatives(srcKey string, outbound bool, depth int, dfs bool) (<-chan string, <-chan error, chan<- bool, error) {
 
 	// get the id of the vertex
 	id, errVertex := d.getVertexId(srcKey)
@@ -279,27 +317,34 @@ func (d *DAG) GetAncestors(srcKey string, dfs bool) (<-chan string, <-chan error
 		return nil, nil, nil, errVertex
 	}
 
-	// compute query options
+	// compute query options / parameters
 	uniqueVertices := "global"
 	order := "bfs"
 	if dfs {
 		order = "dfs"
 		uniqueVertices = "none"
 	}
+	direction := "INBOUND"
+	if outbound {
+		direction = "OUTBOUND"
+	}
 
 	// compute the query
-	query := "FOR v IN 1..10000 INBOUND @from @@collection OPTIONS {order: @order, uniqueVertices: @uniqueVertices}" +
-		"RETURN DISTINCT v"
+	// (somehow INBOUND/OUTBOUND can't be set via bindVars)
+	query := fmt.Sprintf("FOR v IN 1..@depth %s @from @@collection " +
+		"OPTIONS {order: @order, uniqueVertices: @uniqueVertices} RETURN DISTINCT v", direction)
 	bindVars := map[string]interface{}{
 		"@collection":    d.edges.Name(),
 		"from":           id,
 		"order":          order,
 		"uniqueVertices": uniqueVertices,
+		"depth":          depth,
 	}
 
 	chanKeys, chanErrors, chanSignal := d.walker(query, bindVars)
 	return chanKeys, chanErrors, chanSignal, nil
 }
+
 
 
 func (d *DAG) getVertexId(key string) (string, error) {

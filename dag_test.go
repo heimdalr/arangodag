@@ -503,6 +503,54 @@ func TestDAG_GetShortestPath(t *testing.T) {
 	}
 }
 
+func TestDAG_GetParents(t *testing.T) {
+	d := someNewDag(t)
+	_, _ = d.AddVertex(idVertex{"0"})
+
+	// simple chain BFS
+	chanKeys, chanErrors, chanSignal, errorGP := d.GetParents("0")
+	if errorGP != nil {
+		t.Error(errorGP)
+	}
+	defer close(chanSignal)
+	var collect []string
+	for key := range chanKeys {
+		collect = append(collect, key)
+	}
+	for errWalk := range chanErrors {
+		t.Error(errWalk)
+	}
+	var want []string
+	if deep.Equal(collect, want) != nil {
+		t.Errorf("GetParents() = %v, want %v", collect, want)
+	}
+
+	// n parents
+	_, _ = d.AddVertex(idVertex{"1"})
+	_, _ = d.AddVertex(idVertex{"2"})
+	_, _ = d.AddVertex(idVertex{"3"})
+	_, _ = d.AddVertex(idVertex{"4"})
+	_ = d.AddEdge("1", "0")
+	_ = d.AddEdge("2", "0")
+	_ = d.AddEdge("3", "0")
+	_ = d.AddEdge("4", "0")
+	chanKeys1, _, chanSignal1, _ := d.GetParents("0")
+	defer close(chanSignal1)
+	collect1 := make(map[string]interface{})
+	for key := range chanKeys1 {
+		collect1[key] = struct{}{}
+	}
+	want1 := map[string]interface{}{
+		"4": struct {}{},
+		"3": struct {}{},
+		"2": struct {}{},
+		"1": struct {}{},
+	}
+	if deep.Equal(collect1, want1) != nil {
+		t.Errorf("GetParents() = %v, want %v", collect1, want1)
+	}
+}
+
 func TestDAG_GetAncestors(t *testing.T) {
 	d := someNewDag(t)
 	_, _ = d.AddVertex(idVertex{"0"})
@@ -575,6 +623,77 @@ func TestDAG_GetAncestors(t *testing.T) {
 	}
 }
 
+func TestDAG_GetDescendants(t *testing.T) {
+	d := someNewDag(t)
+	_, _ = d.AddVertex(idVertex{"0"})
+	_, _ = d.AddVertex(idVertex{"1"})
+	_, _ = d.AddVertex(idVertex{"2"})
+	_, _ = d.AddVertex(idVertex{"3"})
+	_, _ = d.AddVertex(idVertex{"4"})
+	_ = d.AddEdge("0", "1")
+	_ = d.AddEdge("1", "2")
+	_ = d.AddEdge("2", "3")
+	_ = d.AddEdge("3", "4")
+
+	// simple chain BFS
+	chanKeys, chanErrors, chanSignal, errorGA := d.GetDescendants("0", false)
+	if errorGA != nil {
+		t.Error(errorGA)
+	}
+	defer close(chanSignal)
+	var collect []string
+	for key := range chanKeys {
+		collect = append(collect, key)
+	}
+	for errWalk := range chanErrors {
+		t.Error(errWalk)
+	}
+	want := []string{"1", "2", "3", "4"}
+	if deep.Equal(collect, want) != nil {
+		t.Errorf("GetDescendants() = %v, want %v", collect, want)
+	}
+
+	// two parents BFS
+	_, _ = d.AddVertex(idVertex{"4a"})
+	_ = d.AddEdge("3", "4a")
+	chanKeys1, _, chanSignal1, _ := d.GetDescendants("0", false)
+	defer close(chanSignal1)
+	var collect1 []string
+	for key := range chanKeys1 {
+		collect1 = append(collect1, key)
+	}
+	want1 := []string{"1", "2", "3", "4a", "4"}
+	if deep.Equal(collect1, want1) != nil {
+		t.Errorf("GetDescendants() = %v, want %v", collect1, want1)
+	}
+
+	// rhombus BFS
+	_, _ = d.AddVertex(idVertex{"2a"})
+	_ = d.AddEdge("1", "2a")
+	_ = d.AddEdge("2a", "3")
+	chanKeys2, _, chanSignal2, _ := d.GetDescendants("0", false)
+	defer close(chanSignal2)
+	var collect2 []string
+	for key := range chanKeys2 {
+		collect2 = append(collect2, key)
+	}
+	want2 := []string{"1", "2a", "2", "3", "4a", "4"}
+	if deep.Equal(collect2, want2) != nil {
+		t.Errorf("GetDescendants() = %v, want %v", collect2, want2)
+	}
+
+	// rhombus DFS
+	chanKeys3, _, chanSignal3, _ := d.GetDescendants("0", true)
+	defer close(chanSignal3)
+	var collect3 []string
+	for key := range chanKeys3 {
+		collect3 = append(collect3, key)
+	}
+	want3 := []string{"1", "2", "3", "4", "4a", "2a"}
+	if deep.Equal(collect3, want3) != nil {
+		t.Errorf("GetDescendants() = %v, want %v", collect3, want3)
+	}
+}
 
 
 func someNewDag(t *testing.T) *DAG {
