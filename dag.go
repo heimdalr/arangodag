@@ -14,12 +14,14 @@ type DAG struct {
 	client   driver.Client
 }
 
-
 type myEdge struct {
 	From string `json:"_from"`
 	To   string `json:"_to"`
 }
 
+type myKey struct {
+	Key string `json:"_key,omitempty"`
+}
 
 // NewDAG creates / initializes a new DAG.
 func NewDAG(dbName, vertexCollName, edgeCollName string, client driver.Client) (*DAG, error) {
@@ -108,7 +110,13 @@ func (d *DAG) GetOrder() (uint64, error) {
 	return uint64(count), nil
 }
 
-// GetVertices returns the keys of all vertices of the DAG.
+// GetVertices provides for retrieving the keys of (all) vertices of the DAG.
+//
+// GetVertices does not directly return the keys but instead returns 3 channels.
+// The keys may be received from the string-channel. Any errors that occur while
+// querying may be received from the error-channel. And, finally, the
+// bool-channel may be used to prevent further DB-querying by sending true
+// into it.
 func (d *DAG) GetVertices() (<-chan string, <-chan error, chan<- bool) {
 	query := "FOR v IN @@vertexCollection RETURN v"
 	bindVars := map[string]interface{}{
@@ -117,7 +125,13 @@ func (d *DAG) GetVertices() (<-chan string, <-chan error, chan<- bool) {
 	return d.walker(query, bindVars)
 }
 
-// GetLeaves returns the leaves of the DAG.
+// GetLeaves provides for retrieving the keys of (all) leaves of the DAG.
+//
+// GetLeaves does not directly return the keys but instead returns 3 channels.
+// The keys may be received from the string-channel. Any errors that occur while
+// querying may be received from the error-channel. And, finally, the
+// bool-channel may be used to prevent further DB-querying by sending true
+// into it.
 func (d *DAG) GetLeaves() (<-chan string, <-chan error, chan<- bool) {
 
 	query := "FOR v IN @@vertexCollection " +
@@ -130,7 +144,13 @@ func (d *DAG) GetLeaves() (<-chan string, <-chan error, chan<- bool) {
 	return d.walker(query, bindVars)
 }
 
-// GetRoots returns the roots of the DAG.
+// GetRoots provides for retrieving the keys of (all) roots of the DAG.
+//
+// GetRoots does not directly return the keys but instead returns 3 channels. The
+// keys may be received from the string-channel. Any errors that occur while
+// querying may be received from the error-channel. And, finally, the
+// bool-channel may be used to prevent further DB-querying by sending true into
+// it.
 func (d *DAG) GetRoots() (<-chan string, <-chan error, chan<- bool) {
 	query := "FOR v IN @@vertexCollection " +
 		"FILTER LENGTH(FOR vv IN 1..1 INBOUND v @@edgeCollection LIMIT 1 RETURN 1) == 0 " +
@@ -142,15 +162,19 @@ func (d *DAG) GetRoots() (<-chan string, <-chan error, chan<- bool) {
 	return d.walker(query, bindVars)
 }
 
-// AddEdge adds an edge from src to dst.
-func (d *DAG) AddEdge(src, dst string) error {
+// AddEdge adds an edge from the vertex with the key srcKey to the vertex with
+// the key dstKey.
+//
+// AddEdge prevents duplicate edges and loops (and thereby maintains a valid
+// DAG).
+func (d *DAG) AddEdge(srcKey, dstKey string) error {
 
 	// ensure vertices exist
-	srcId, errSrc := d.getVertexId(src)
+	srcId, errSrc := d.getVertexId(srcKey)
 	if errSrc != nil {
 		return errSrc
 	}
-	dstId, errDst := d.getVertexId(dst)
+	dstId, errDst := d.getVertexId(dstKey)
 	if errDst != nil {
 		return errDst
 	}
@@ -182,20 +206,21 @@ func (d *DAG) AddEdge(src, dst string) error {
 	return nil
 }
 
-// EdgeExists returns true, if an edge from src to dst exists.
-func (d *DAG) EdgeExists(src, dst string) (bool, error) {
-	srcId, errSrc := d.getVertexId(src)
+// EdgeExists returns true, if an edge between the vertex with the key srcKey and the
+// vertex with the key dstKey exists.
+func (d *DAG) EdgeExists(srcKey, dstKey string) (bool, error) {
+	srcId, errSrc := d.getVertexId(srcKey)
 	if errSrc != nil {
 		return false, errSrc
 	}
-	dstId, errDst := d.getVertexId(dst)
+	dstId, errDst := d.getVertexId(dstKey)
 	if errDst != nil {
 		return false, errDst
 	}
 	return d.edgeExists(srcId, dstId)
 }
 
-// GetSize returns the number of edges in the graph.
+// GetSize returns the number of edges in the DAG.
 func (d *DAG) GetSize() (uint64, error) {
 	count, err := d.edges.Count(context.Background())
 	if err != nil {
@@ -204,18 +229,23 @@ func (d *DAG) GetSize() (uint64, error) {
 	return uint64(count), nil
 }
 
-type myKey struct {
-	Key string `json:"_key,omitempty"`
-}
-
-// GetShortestPath returns the shortest path between src and dst. GetShortestPath returns nil if
-// there is no such path.
-func (d *DAG) GetShortestPath(src, dst string) (<-chan string, <-chan error, chan<- bool, error) {
-	srcId, errSrc := d.getVertexId(src)
+// GetShortestPath returns the keys of the vertices on the shortest path between
+// the vertex with the key srcKey and the vertex with the key dstKey.
+//
+// GetShortestPath does not directly return the keys but instead returns 3 channels. The
+// keys may be received from the string-channel. Any errors that occur while
+// querying may be received from the error-channel. And, finally, the
+// bool-channel may be used to prevent further DB-querying by sending true into
+// it.
+//
+// GetShortestPath "immediately" closes the string-channel, if there is
+// no such path.
+func (d *DAG) GetShortestPath(srcKey, dstKey string) (<-chan string, <-chan error, chan<- bool, error) {
+	srcId, errSrc := d.getVertexId(srcKey)
 	if errSrc != nil {
 		return nil, nil, nil, errSrc
 	}
-	dstId, errDst := d.getVertexId(dst)
+	dstId, errDst := d.getVertexId(dstKey)
 	if errDst != nil {
 		return nil, nil, nil, errDst
 	}
@@ -229,12 +259,22 @@ func (d *DAG) GetShortestPath(src, dst string) (<-chan string, <-chan error, cha
 	return chanKeys, chanErrors, chanSignal, nil
 }
 
-// GetAncestors returns all ancestors of key breadth order. If dfs
-// is set to true, the traversal will be executed depth-first.
-func (d *DAG) GetAncestors(key string, dfs bool) (<-chan string, <-chan error, chan<- bool, error) {
+// GetAncestors returns the keys of all ancestor vertices of the vertex with the key srcKey in
+// breadth first order. If dfs is set to true, the traversal will be executed
+// depth-first.
+//
+// GetAncestors does not directly return the keys but instead returns 3 channels. The
+// keys may be received from the string-channel. Any errors that occur while
+// querying may be received from the error-channel. And, finally, the
+// bool-channel may be used to prevent further DB-querying by sending true into
+// it.
+//
+// GetAncestors "immediately" closes the string-channel, if there is
+// no ancestors.
+func (d *DAG) GetAncestors(srcKey string, dfs bool) (<-chan string, <-chan error, chan<- bool, error) {
 
 	// get the id of the vertex
-	id, errVertex := d.getVertexId(key)
+	id, errVertex := d.getVertexId(srcKey)
 	if errVertex != nil {
 		return nil, nil, nil, errVertex
 	}
@@ -348,10 +388,6 @@ func (d *DAG) walker(query string, bindVars map[string]interface{}) (<-chan stri
 	return chanKeys, chanErrors, chanSignal
 }
 
-// WalkFunc is the type expected by WalkAncestors.
-type WalkFunc func(key string, err error) error
-
-
 /*
 func (d *DAG) getChildCount(id driver.DocumentID) (uint64, error) {
 	// TODO: use bind variables
@@ -364,37 +400,6 @@ func (d *DAG) getChildCount(id driver.DocumentID) (uint64, error) {
 	}
 	defer cursor.Close()
 	return uint64(cursor.Count()), nil
-}
-
-func (d *DAG) GetRoots() (map[string]struct{}, error) {
-	// TODO: use bind variables
-	query := fmt.Sprintf("FOR d IN %s RETURN d", d.vertices.Name())
-	db := d.vertices.Database()
-	cursor, err := db.Query(nil, query, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close()
-
-	leaves := make(map[string]struct{})
-	var i map[string]interface{}
-	for {
-		meta, err := cursor.ReadDocument(nil, &i)
-		if driver.IsNoMoreDocuments(err) {
-			break
-		} else if err != nil {
-			return nil, err
-		}
-
-		childCount, err := d.getParentCount(meta.ID)
-		if err != nil {
-			return nil, err
-		}
-		if childCount == 0 {
-			leaves[meta.Key] = struct{}{}
-		}
-	}
-	return leaves, nil
 }
 
 func (d *DAG) getParentCount(id driver.DocumentID) (uint64, error) {
@@ -410,29 +415,6 @@ func (d *DAG) getParentCount(id driver.DocumentID) (uint64, error) {
 	return uint64(cursor.Count()), nil
 }
 
-func (d *DAG) GetVertices() (map[string]struct{}, error) {
-	// TODO: implement paging
-	query := fmt.Sprintf("FOR d IN %s RETURN d", d.vertices.Name())
-	db := d.vertices.Database()
-	cursor, err := db.Query(nil, query, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close()
-
-	vertices := make(map[string]struct{})
-	var i map[string]interface{}
-	for {
-		meta, err := cursor.ReadDocument(nil, &i)
-		if driver.IsNoMoreDocuments(err) {
-			break
-		} else if err != nil {
-			return nil, err
-		}
-		vertices[meta.Key] = struct{}{}
-	}
-	return vertices, nil
-}
 
 
 
@@ -440,13 +422,6 @@ func (d *DAG) DeleteVertex(key string) error {
 	panic("implement me")
 }
 
-func (d *DAG) AddEdge(srcKey, dstKey string) error {
-	panic("implement me")
-}
-
-func (d *DAG) EdgeExists(srcKey, dstKey string) (bool, error) {
-	panic("implement me")
-}
 
 func (d *DAG) DeleteEdge(srcKey, dstKey string) error {
 	panic("implement me")
@@ -460,17 +435,7 @@ func (d *DAG) GetChildren(key string) (map[string]struct{}, error) {
 	panic("implement me")
 }
 
-func (d *DAG) GetAncestors(key string) (map[string]struct{}, error) {
-	panic("implement me")
-}
 
-func (d *DAG) GetOrderedAncestors(key string) ([]string, error) {
-	panic("implement me")
-}
-
-func (d *DAG) AncestorsWalker(key string) (chan string, chan bool, error) {
-	panic("implement me")
-}
 
 func (d *DAG) GetDescendants(key string) (map[string]struct{}, error) {
 	panic("implement me")
@@ -484,7 +449,4 @@ func (d *DAG) DescendantsWalker(v string) (chan string, chan bool, error) {
 	panic("implement me")
 }
 
-func (d *DAG) String() string {
-	panic("implement me")
-}
 */
