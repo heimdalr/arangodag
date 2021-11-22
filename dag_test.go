@@ -418,26 +418,36 @@ func TestDAG_GetLeaves(t *testing.T) {
 	_, _ = d.AddVertex(idVertex{"0"})
 
 	// start is leave
-	leaves, err := d.GetLeaves()
-	if err != nil {
-		t.Errorf("failed to GetLeaves(): %v", err)
+	chanKeys, chanErrors, chanSignal := d.GetLeaves()
+	defer close(chanSignal)
+	var collect []string
+	for key := range chanKeys {
+		collect = append(collect, key)
+	}
+	for errWalk := range chanErrors {
+		t.Error(errWalk)
 	}
 	want := []string{"0"}
-	if deep.Equal(leaves, want) != nil {
-		t.Errorf("GetLeaves() = %v, want %v", leaves, want)
+	if deep.Equal(collect, want) != nil {
+		t.Errorf("GetLeaves() = %v, want %v", collect, want)
 	}
 
 	_, _ = d.AddVertex(idVertex{"1"})
 	_ = d.AddEdge("0", "1")
 
 	// one "real" leave
-	leaves2, err2 := d.GetLeaves()
-	if err2 != nil {
-		t.Errorf("failed to GetLeaves(): %v", err2)
+	chanKeys1, chanErrors1, chanSignal1 := d.GetLeaves()
+	defer close(chanSignal1)
+	var collect1 []string
+	for key := range chanKeys1 {
+		collect1 = append(collect1, key)
 	}
-	want2 := []string{"1"}
-	if deep.Equal(leaves2, want2) != nil {
-		t.Errorf("GetLeaves() = %v, want %v", leaves2, want2)
+	for errWalk := range chanErrors1 {
+		t.Error(errWalk)
+	}
+	want1 := []string{"1"}
+	if deep.Equal(collect1, want1) != nil {
+		t.Errorf("GetLeaves() = %v, want %v", collect1, want1)
 	}
 
 	// 10 leaves
@@ -446,13 +456,18 @@ func TestDAG_GetLeaves(t *testing.T) {
 		_, _ = d.AddVertex(idVertex{dstKey})
 		_ = d.AddEdge("0", dstKey)
 	}
-	leaves3, err3 := d.GetLeaves()
-	if err3 != nil {
-		t.Errorf("failed to GetLeaves(): %v", err3)
+	chanKeys2, chanErrors2, chanSignal2 := d.GetLeaves()
+	defer close(chanSignal2)
+	var collect2 []string
+	for key := range chanKeys2 {
+		collect2 = append(collect2, key)
 	}
-	want3 := []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}
-	if deep.Equal(leaves3, want3) != nil {
-		t.Errorf("GetLeaves() = %v, want %v", leaves3, want3)
+	for errWalk := range chanErrors2 {
+		t.Error(errWalk)
+	}
+	want2 := []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}
+	if deep.Equal(collect2, want2) != nil {
+		t.Errorf("GetLeaves() = %v, want %v", collect2, want2)
 	}
 }
 
@@ -461,11 +476,11 @@ func TestDAG_GetRoots(t *testing.T) {
 	_, _ = d.AddVertex(idVertex{"0"})
 
 	// start is root
-	chanRoots, chanErrors, chanSignal := d.GetRoots()
+	chanKeys, chanErrors, chanSignal := d.GetRoots()
 	defer close(chanSignal)
 	var collect []string
-	for root := range chanRoots {
-		collect = append(collect, root)
+	for key := range chanKeys {
+		collect = append(collect, key)
 	}
 	for errWalk := range chanErrors {
 		t.Error(errWalk)
@@ -479,11 +494,11 @@ func TestDAG_GetRoots(t *testing.T) {
 	_ = d.AddEdge("0", "1")
 
 	// one "real" root
-	chanRoots1, chanErrors1, chanSignal1 := d.GetRoots()
+	chanKeys1, chanErrors1, chanSignal1 := d.GetRoots()
 	defer close(chanSignal1)
 	var collect1 []string
-	for root := range chanRoots1 {
-		collect1 = append(collect1, root)
+	for key := range chanKeys1 {
+		collect1 = append(collect1, key)
 	}
 	for errWalk := range chanErrors1 {
 		t.Error(errWalk)
@@ -499,11 +514,11 @@ func TestDAG_GetRoots(t *testing.T) {
 		_, _ = d.AddVertex(idVertex{srcKey})
 		_ = d.AddEdge(srcKey, "1")
 	}
-	chanRoots2, chanErrors2, chanSignal2 := d.GetRoots()
+	chanKeys2, chanErrors2, chanSignal2 := d.GetRoots()
 	defer close(chanSignal2)
 	var collect2 []string
-	for root := range chanRoots2 {
-		collect2 = append(collect2, root)
+	for key := range chanKeys2 {
+		collect2 = append(collect2, key)
 	}
 	for errWalk := range chanErrors2 {
 		t.Error(errWalk)
@@ -514,12 +529,12 @@ func TestDAG_GetRoots(t *testing.T) {
 	}
 
 	// signal ~4/9 roots
-	chanRoots3, chanErrors3, chanSignal3 := d.GetRoots()
+	chanKeys3, chanErrors3, chanSignal3 := d.GetRoots()
 	defer close(chanSignal3)
 	var collect3 []string
-	for root := range chanRoots3 {
-		collect3 = append(collect3, root)
-		if root == "4" {
+	for key := range chanKeys3 {
+		collect3 = append(collect3, key)
+		if key == "4" {
 			chanSignal3 <- true
 			break
 		}

@@ -193,7 +193,9 @@ func (d *DAG) getEdgeId(srcId, dstId string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer cursor.Close()
+	defer func(){
+		_ = cursor.Close()
+	}()
 	var doc myEdge
 	meta, err := cursor.ReadDocument(ctx, &doc)
 	if driver.IsNoMoreDocuments(err) {
@@ -245,7 +247,9 @@ func (d *DAG) getShortestPath(srcId, dstId string) ([]driver.DocumentMeta, error
 	if err != nil {
 		return result, err
 	}
-	defer cursor.Close()
+	defer func() {
+		_ = cursor.Close()
+	}()
 	for {
 		var doc myEdge
 		meta, err := cursor.ReadDocument(ctx, &doc)
@@ -269,27 +273,13 @@ func (d *DAG) GetSize() (uint64, error) {
 	return uint64(count), nil
 }
 
-// GetLeaves returns the leaves of the DAG.
-func (d *DAG) GetLeaves() ([]string, error) {
-	leaves, errLeaves := d.getLeaves()
-	if errLeaves != nil {
-		return nil, errLeaves
-	}
-	if leaves == nil {
-		return nil, nil
-	}
-	result := make([]string, len(leaves))
-	for i, x := range leaves {
-		result[i] = x.Key
-	}
-	return result, nil
+type myKey struct {
+	Key string `json:"_key,omitempty"`
 }
 
-func (d *DAG) getLeaves() ([]driver.DocumentMeta, error) {
+// GetLeaves returns the leaves of the DAG.
+func (d *DAG) GetLeaves() (<-chan string, <-chan error, chan<- bool) {
 
-	var result []driver.DocumentMeta
-
-	ctx := context.Background()
 	query := "FOR v IN @@vertexCollection " +
 		"FILTER LENGTH(FOR vv IN 1..1 OUTBOUND v @@edgeCollection LIMIT 1 RETURN 1) == 0 " +
 		"RETURN v"
@@ -297,28 +287,7 @@ func (d *DAG) getLeaves() ([]driver.DocumentMeta, error) {
 		"@vertexCollection": d.vertices.Name(),
 		"@edgeCollection":   d.edges.Name(),
 	}
-
-	cursor, err := d.db.Query(ctx, query, bindVars)
-	if err != nil {
-		return result, err
-	}
-	defer cursor.Close()
-	var vertex driver.DocumentMeta
-	for {
-		meta, err := cursor.ReadDocument(ctx, &vertex)
-		if driver.IsNoMoreDocuments(err) {
-			break
-		}
-		if err != nil {
-			return result, err
-		}
-		result = append(result, meta)
-	}
-	return result, nil
-}
-
-type myKey struct {
-	Key string `json:"_key,omitempty"`
+	return d.walker(query, bindVars)
 }
 
 // GetRoots returns the roots of the DAG.
@@ -335,20 +304,25 @@ func (d *DAG) GetRoots() (<-chan string, <-chan error, chan<- bool) {
 
 func (d *DAG) walker(query string, bindVars map[string]interface{}) (<-chan string, <-chan error, chan<- bool) {
 
-	chanRoots := make(chan string)
+	chanKeys := make(chan string)
 	chanErrors := make(chan error)
 	chanSignal := make(chan bool, 1)
 
 	go func() {
 		defer close(chanErrors)
-		defer close(chanRoots)
+		defer close(chanKeys)
 		ctx := context.Background()
 		cursor, err := d.db.Query(ctx, query, bindVars)
 		if err != nil {
 			chanErrors <- err
 			return
 		}
-		defer cursor.Close()
+		defer func(){
+			errClose := cursor.Close()
+			if errClose != nil {
+				chanErrors <- errClose
+			}
+		}()
 
 		var key myKey
 		for {
@@ -364,44 +338,12 @@ func (d *DAG) walker(query string, bindVars map[string]interface{}) (<-chan stri
 			case <-chanSignal:
 				return
 			default:
-				chanRoots <- key.Key
+				chanKeys <- key.Key
 			}
 		}
 	}()
 
-	return chanRoots, chanErrors, chanSignal
-}
-
-func (d *DAG) getRoots() ([]driver.DocumentMeta, error) {
-
-	var result []driver.DocumentMeta
-
-	ctx := context.Background()
-	query := "FOR v IN @@vertexCollection " +
-		"FILTER LENGTH(FOR vv IN 1..1 INBOUND v @@edgeCollection LIMIT 1 RETURN 1) == 0 " +
-		"RETURN v"
-	bindVars := map[string]interface{}{
-		"@vertexCollection": d.vertices.Name(),
-		"@edgeCollection":   d.edges.Name(),
-	}
-
-	cursor, err := d.db.Query(ctx, query, bindVars)
-	if err != nil {
-		return result, err
-	}
-	defer cursor.Close()
-	var vertex driver.DocumentMeta
-	for {
-		meta, err := cursor.ReadDocument(ctx, &vertex)
-		if driver.IsNoMoreDocuments(err) {
-			break
-		}
-		if err != nil {
-			return result, err
-		}
-		result = append(result, meta)
-	}
-	return result, nil
+	return chanKeys, chanErrors, chanSignal
 }
 
 // WalkFunc is the type expected by WalkAncestors.
@@ -442,7 +384,9 @@ func (d *DAG) WalkAncestors(key string, fn WalkFunc, dfs bool) error {
 	if errQuery != nil {
 		return errQuery
 	}
-	defer cursor.Close()
+	defer func(){
+		_ = cursor.Close()
+	}()
 
 	// iterate query results
 	var vertex driver.DocumentMeta
