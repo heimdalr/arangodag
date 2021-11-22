@@ -460,37 +460,15 @@ func (d *DAG) getParentCount(id driver.DocumentID) (uint64, error) {
 	return uint64(cursor.Count()), nil
 }
 
-
-
-
 func (d *DAG) DeleteVertex(key string) error {
 	panic("implement me")
 }
-
 
 func (d *DAG) DeleteEdge(srcKey, dstKey string) error {
 	panic("implement me")
 }
 
-func (d *DAG) GetParents(key string) (map[string]struct{}, error) {
-	panic("implement me")
-}
-
 func (d *DAG) GetChildren(key string) (map[string]struct{}, error) {
-	panic("implement me")
-}
-
-
-
-func (d *DAG) GetDescendants(key string) (map[string]struct{}, error) {
-	panic("implement me")
-}
-
-func (d *DAG) GetOrderedDescendants(key string) ([]string, error) {
-	panic("implement me")
-}
-
-func (d *DAG) DescendantsWalker(v string) (chan string, chan bool, error) {
 	panic("implement me")
 }
 
