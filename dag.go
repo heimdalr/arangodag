@@ -14,6 +14,13 @@ type DAG struct {
 	client   driver.Client
 }
 
+
+type myEdge struct {
+	From string `json:"_from"`
+	To   string `json:"_to"`
+}
+
+
 // NewDAG creates / initializes a new DAG.
 func NewDAG(dbName, vertexCollName, edgeCollName string, client driver.Client) (*DAG, error) {
 
@@ -84,20 +91,12 @@ func (d *DAG) AddVertex(vertex interface{}) (string, error) {
 
 // GetVertex returns the vertex with the given key.
 func (d *DAG) GetVertex(key string, vertex interface{}) error {
-	_, err := d.getVertex(key, vertex)
+	ctx := context.Background()
+	_, err := d.vertices.ReadDocument(ctx, key, vertex)
 	if err != nil {
 		return err
 	}
 	return nil
-}
-
-func (d *DAG) getVertex(key string, vertex interface{}) (string, error) {
-	ctx := context.Background()
-	meta, err := d.vertices.ReadDocument(ctx, key, vertex)
-	if err != nil {
-		return "", err
-	}
-	return string(meta.ID), nil
 }
 
 // GetOrder returns the number of vertices in the graph.
@@ -107,174 +106,15 @@ func (d *DAG) GetOrder() (uint64, error) {
 		return 0, err
 	}
 	return uint64(count), nil
-
 }
 
-type myEdge struct {
-	From string `json:"_from"`
-	To   string `json:"_to"`
-}
-
-// AddEdge adds an edge from src to dst.
-//
-// AddEdge requires that src and dst exist. AddEdge prevents duplicate edges.
-func (d *DAG) AddEdge(src, dst string) error {
-
-	// ensure vertices exist
-	srcId, errSrc := d.getVertex(src, nil)
-	if errSrc != nil {
-		return errSrc
-	}
-	dstId, errDst := d.getVertex(dst, nil)
-	if errDst != nil {
-		return errDst
-	}
-
-	// prevent duplicate edge
-	id, errEdge := d.getEdgeId(srcId, dstId)
-	if errEdge != nil {
-		return errEdge
-	}
-	if id != "" {
-		return errors.New("duplicate edge")
-	}
-
-	// prevent loops
-	path, errSrc := d.getShortestPath(dstId, srcId)
-	if errSrc != nil {
-		return errSrc
-	}
-	if path != nil {
-		if len(path) == 1 {
-			return errors.New("self loop")
-		}
-		return errors.New("loop")
-	}
-
-	// add edge
-	ctx := context.Background()
-	_, err := d.edges.CreateDocument(ctx, myEdge{srcId, dstId})
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// IsEdge returns true, if an edge from src to dst exists.
-func (d *DAG) IsEdge(src, dst string) (bool, error) {
-	srcId, errSrc := d.getVertex(src, nil)
-	if errSrc != nil {
-		return false, errSrc
-	}
-	dstId, errDst := d.getVertex(dst, nil)
-	if errDst != nil {
-		return false, errDst
-	}
-	id, err := d.getEdgeId(srcId, dstId)
-	if err != nil {
-		return false, err
-	}
-	if id == "" {
-		return false, nil
-	}
-	return true, nil
-}
-
-func (d *DAG) getEdgeId(srcId, dstId string) (string, error) {
-	ctx := context.Background()
-	query := "FOR d IN @@collection FILTER d._from == @from AND d._to == @to RETURN d"
+// GetVertices returns the keys of all vertices of the DAG.
+func (d *DAG) GetVertices() (<-chan string, <-chan error, chan<- bool) {
+	query := "FOR v IN @@vertexCollection RETURN v"
 	bindVars := map[string]interface{}{
-		"@collection": d.edges.Name(),
-		"from":        srcId,
-		"to":          dstId,
+		"@vertexCollection": d.vertices.Name(),
 	}
-
-	cursor, err := d.db.Query(ctx, query, bindVars)
-	if err != nil {
-		return "", err
-	}
-	defer func(){
-		_ = cursor.Close()
-	}()
-	var doc myEdge
-	meta, err := cursor.ReadDocument(ctx, &doc)
-	if driver.IsNoMoreDocuments(err) {
-		return "", nil
-	}
-	if err != nil {
-		return "", err
-	}
-	return string(meta.ID), nil
-}
-
-// GetShortestPath returns the shortest path between src and dst. GetShortestPath returns nil if
-// there is no such path.
-func (d *DAG) GetShortestPath(src, dst string) ([]string, error) {
-	srcId, errSrc := d.getVertex(src, nil)
-	if errSrc != nil {
-		return nil, errSrc
-	}
-	dstId, errDst := d.getVertex(dst, nil)
-	if errDst != nil {
-		return nil, errDst
-	}
-	path, errPath := d.getShortestPath(srcId, dstId)
-	if errPath != nil {
-		return nil, errPath
-	}
-	if path == nil {
-		return nil, nil
-	}
-	result := make([]string, len(path))
-	for i, x := range path {
-		result[i] = x.Key
-	}
-	return result, nil
-}
-
-func (d *DAG) getShortestPath(srcId, dstId string) ([]driver.DocumentMeta, error) {
-	var result []driver.DocumentMeta
-
-	ctx := context.Background()
-	query := "FOR v IN OUTBOUND SHORTEST_PATH @from TO @to @@collection RETURN v"
-	bindVars := map[string]interface{}{
-		"@collection": d.edges.Name(),
-		"from":        srcId,
-		"to":          dstId,
-	}
-
-	cursor, err := d.db.Query(ctx, query, bindVars)
-	if err != nil {
-		return result, err
-	}
-	defer func() {
-		_ = cursor.Close()
-	}()
-	for {
-		var doc myEdge
-		meta, err := cursor.ReadDocument(ctx, &doc)
-		if driver.IsNoMoreDocuments(err) {
-			break
-		}
-		if err != nil {
-			return result, err
-		}
-		result = append(result, meta)
-	}
-	return result, nil
-}
-
-// GetSize returns the number of edges in the graph.
-func (d *DAG) GetSize() (uint64, error) {
-	count, err := d.edges.Count(context.Background())
-	if err != nil {
-		return 0, err
-	}
-	return uint64(count), nil
-}
-
-type myKey struct {
-	Key string `json:"_key,omitempty"`
+	return d.walker(query, bindVars)
 }
 
 // GetLeaves returns the leaves of the DAG.
@@ -300,6 +140,168 @@ func (d *DAG) GetRoots() (<-chan string, <-chan error, chan<- bool) {
 		"@edgeCollection":   d.edges.Name(),
 	}
 	return d.walker(query, bindVars)
+}
+
+// AddEdge adds an edge from src to dst.
+func (d *DAG) AddEdge(src, dst string) error {
+
+	// ensure vertices exist
+	srcId, errSrc := d.getVertexId(src)
+	if errSrc != nil {
+		return errSrc
+	}
+	dstId, errDst := d.getVertexId(dst)
+	if errDst != nil {
+		return errDst
+	}
+
+	// prevent duplicate edge
+	existsEdge, errEdge :=d.edgeExists(srcId, dstId)
+	if errEdge != nil {
+		return errEdge
+	}
+	if existsEdge {
+		return errors.New("duplicate edge")
+	}
+
+	// prevent loops
+	pathExists, errSrc := d.pathExists(dstId, srcId)
+	if errSrc != nil {
+		return errSrc
+	}
+	if pathExists {
+		return errors.New("loop")
+	}
+
+	// add edge
+	ctx := context.Background()
+	_, err := d.edges.CreateDocument(ctx, myEdge{srcId, dstId})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// EdgeExists returns true, if an edge from src to dst exists.
+func (d *DAG) EdgeExists(src, dst string) (bool, error) {
+	srcId, errSrc := d.getVertexId(src)
+	if errSrc != nil {
+		return false, errSrc
+	}
+	dstId, errDst := d.getVertexId(dst)
+	if errDst != nil {
+		return false, errDst
+	}
+	return d.edgeExists(srcId, dstId)
+}
+
+// GetSize returns the number of edges in the graph.
+func (d *DAG) GetSize() (uint64, error) {
+	count, err := d.edges.Count(context.Background())
+	if err != nil {
+		return 0, err
+	}
+	return uint64(count), nil
+}
+
+type myKey struct {
+	Key string `json:"_key,omitempty"`
+}
+
+// GetShortestPath returns the shortest path between src and dst. GetShortestPath returns nil if
+// there is no such path.
+func (d *DAG) GetShortestPath(src, dst string) (<-chan string, <-chan error, chan<- bool, error) {
+	srcId, errSrc := d.getVertexId(src)
+	if errSrc != nil {
+		return nil, nil, nil, errSrc
+	}
+	dstId, errDst := d.getVertexId(dst)
+	if errDst != nil {
+		return nil, nil, nil, errDst
+	}
+	query := "FOR v IN OUTBOUND SHORTEST_PATH @from TO @to @@collection RETURN v"
+	bindVars := map[string]interface{}{
+		"@collection": d.edges.Name(),
+		"from":        srcId,
+		"to":          dstId,
+	}
+	chanKeys, chanErrors, chanSignal := d.walker(query, bindVars)
+	return chanKeys, chanErrors, chanSignal, nil
+}
+
+// GetAncestors returns all ancestors of key breadth order. If dfs
+// is set to true, the traversal will be executed depth-first.
+func (d *DAG) GetAncestors(key string, dfs bool) (<-chan string, <-chan error, chan<- bool, error) {
+
+	// get the id of the vertex
+	id, errVertex := d.getVertexId(key)
+	if errVertex != nil {
+		return nil, nil, nil, errVertex
+	}
+
+	// compute query options
+	uniqueVertices := "global"
+	order := "bfs"
+	if dfs {
+		order = "dfs"
+		uniqueVertices = "none"
+	}
+
+	// compute the query
+	query := "FOR v IN 1..10000 INBOUND @from @@collection OPTIONS {order: @order, uniqueVertices: @uniqueVertices}" +
+		"RETURN DISTINCT v"
+	bindVars := map[string]interface{}{
+		"@collection":    d.edges.Name(),
+		"from":           id,
+		"order":          order,
+		"uniqueVertices": uniqueVertices,
+	}
+
+	chanKeys, chanErrors, chanSignal := d.walker(query, bindVars)
+	return chanKeys, chanErrors, chanSignal, nil
+}
+
+
+func (d *DAG) getVertexId(key string) (string, error) {
+	ctx := context.Background()
+	var data driver.DocumentMeta
+	meta, err := d.vertices.ReadDocument(ctx, key, &data)
+	if err != nil {
+		return "", err
+	}
+	return string(meta.ID), nil
+}
+
+func (d *DAG) edgeExists(srcId, dstId string) (bool, error) {
+	query := "FOR v IN 1..1 OUTBOUND @from @@collection FILTER v._id == @to LIMIT 1 RETURN v"
+	bindVars := map[string]interface{}{
+		"@collection": d.edges.Name(),
+		"from":        srcId,
+		"to":          dstId,
+	}
+	return d.exists(query, bindVars)
+}
+
+func (d *DAG) pathExists(srcId, dstId string) (bool, error) {
+	query := "FOR v IN OUTBOUND SHORTEST_PATH @from TO @to @@collection LIMIT 1 RETURN v"
+	bindVars := map[string]interface{}{
+		"@collection": d.edges.Name(),
+		"from":        srcId,
+		"to":          dstId,
+	}
+	return d.exists(query, bindVars)
+}
+
+func (d *DAG) exists(query string, bindVars map[string]interface{}) (bool, error) {
+	ctx := driver.WithQueryCount(context.Background())
+	cursor, err := d.db.Query(ctx, query, bindVars)
+	if err != nil {
+		return false, err
+	}
+	defer func() {
+		_ = cursor.Close()
+	}()
+	return cursor.Count() > 0, nil
 }
 
 func (d *DAG) walker(query string, bindVars map[string]interface{}) (<-chan string, <-chan error, chan<- bool) {
@@ -349,64 +351,6 @@ func (d *DAG) walker(query string, bindVars map[string]interface{}) (<-chan stri
 // WalkFunc is the type expected by WalkAncestors.
 type WalkFunc func(key string, err error) error
 
-// WalkAncestors walks all ancestors of key and applies the function fn. If dfs
-// is set to true, the traversal will be executed depth-first (default breadth
-// first).
-func (d *DAG) WalkAncestors(key string, fn WalkFunc, dfs bool) error {
-
-	// get the id of the vertex
-	id, errVertex := d.getVertex(key, nil)
-	if errVertex != nil {
-		return errVertex
-	}
-
-	// compute query options
-	uniqueVertices := "global"
-	order := "bfs"
-	if dfs {
-		order = "dfs"
-		uniqueVertices = "none"
-	}
-
-	// compute the query
-	query := "FOR v IN 1..10000 INBOUND @from @@collection OPTIONS {order: @order, uniqueVertices: @uniqueVertices}" +
-		"RETURN DISTINCT v"
-	bindVars := map[string]interface{}{
-		"@collection":    d.edges.Name(),
-		"from":           id,
-		"order":          order,
-		"uniqueVertices": uniqueVertices,
-	}
-
-	// execute the query
-	ctx := context.Background()
-	cursor, errQuery := d.db.Query(ctx, query, bindVars)
-	if errQuery != nil {
-		return errQuery
-	}
-	defer func(){
-		_ = cursor.Close()
-	}()
-
-	// iterate query results
-	var vertex driver.DocumentMeta
-	for {
-		meta, errRead := cursor.ReadDocument(ctx, &vertex)
-		if driver.IsNoMoreDocuments(errRead) {
-			break
-		}
-		if errRead != nil {
-			return errRead
-		}
-
-		// apply function
-		errFn := fn(meta.Key, nil)
-		if errFn != nil {
-			return errFn
-		}
-	}
-	return nil
-}
 
 /*
 func (d *DAG) getChildCount(id driver.DocumentID) (uint64, error) {
@@ -500,7 +444,7 @@ func (d *DAG) AddEdge(srcKey, dstKey string) error {
 	panic("implement me")
 }
 
-func (d *DAG) IsEdge(srcKey, dstKey string) (bool, error) {
+func (d *DAG) EdgeExists(srcKey, dstKey string) (bool, error) {
 	panic("implement me")
 }
 

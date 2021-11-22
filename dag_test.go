@@ -11,65 +11,28 @@ import (
 	"time"
 )
 
-func someName() string {
-	//return fmt.Sprintf("test_%s", uuid.New().String())
-	return fmt.Sprintf("test_%d", time.Now().UnixNano())
+type foobar struct {
+	A string
+	B string
 }
 
-func someNewDag(t *testing.T) *DAG {
-
-	// get arangdb host and port from environment
-	host := os.Getenv("ARANGODB_HOST")
-	if host == "" {
-		host = "localhost"
-	}
-	port := os.Getenv("ARANGODB_PORT")
-	if port == "" {
-		port = "8529"
-	}
-
-	// new connection
-	conn, err := http.NewConnection(http.ConnectionConfig{
-		Endpoints: []string{fmt.Sprintf("http://%s:%s", host, port)},
-	})
-	if err != nil {
-		t.Fatalf("failed to setup connection: %v", err)
-	}
-
-	// new client
-	client, err := driver.NewClient(driver.ClientConfig{
-		Connection: conn,
-	})
-	if err != nil {
-		t.Fatalf("failed to setup client: %v", err)
-	}
-
-	dbName := someName()
-	vertexCollName := someName()
-	edgeCollName := someName()
-
-	d, err := NewDAG(dbName, vertexCollName, edgeCollName, client)
-	if err != nil {
-		t.Fatalf("failed to setup new dag: %v", err)
-	}
-	return d
+type foobarKey struct {
+	A   string
+	B   string
+	Key string `json:"_key"`
 }
 
 func TestNewDAG(t *testing.T) {
 	someNewDag(t)
 }
 
-type idVertex struct {
-	Key string `json:"_key"`
-}
-
 func TestDAG_AddVertex(t *testing.T) {
 	d := someNewDag(t)
 
 	// simple vertex
-	autoId, err := d.AddVertex(struct{ foo string }{foo: "1"})
-	if err != nil {
-		t.Errorf("failed to AddVertex(): %v", err)
+	autoId, errAdd1 := d.AddVertex(struct{ foo string }{foo: "1"})
+	if errAdd1 != nil {
+		t.Error(errAdd1)
 	}
 	if autoId == "" {
 		t.Errorf("want id, got: %v", autoId)
@@ -77,9 +40,9 @@ func TestDAG_AddVertex(t *testing.T) {
 
 	// vertex with id
 	id := "1"
-	idReturned, err := d.AddVertex(idVertex{Key: "1"})
-	if err != nil {
-		t.Fatalf("failed to AddVertex(): %v", err)
+	idReturned, errAdd2 := d.AddVertex(idVertex{Key: "1"})
+	if errAdd2 != nil {
+		t.Error(errAdd2)
 	}
 	if idReturned != id {
 		t.Errorf("AddVertex() = '%s', want %s", idReturned, id)
@@ -96,18 +59,6 @@ func TestDAG_AddVertex(t *testing.T) {
 	if errNil == nil {
 		t.Errorf("want nil Error")
 	}
-
-}
-
-type foobar struct {
-	A string
-	B string
-}
-
-type foobarKey struct {
-	A   string
-	B   string
-	Key string `json:"_key"`
 }
 
 func TestDAG_GetVertex(t *testing.T) {
@@ -116,9 +67,9 @@ func TestDAG_GetVertex(t *testing.T) {
 	v0 := idVertex{Key: "1"}
 	k, _ := d.AddVertex(v0)
 	var v1 idVertex
-	err := d.GetVertex(k, &v1)
-	if err != nil {
-		t.Errorf("failed to GetVertex(): %v", err)
+	errVert1 := d.GetVertex(k, &v1)
+	if errVert1 != nil {
+		t.Error(errVert1)
 	}
 	if deep.Equal(v0, v1) != nil {
 		t.Errorf("GetVertex() = %v, want %v", v1, v0)
@@ -128,9 +79,9 @@ func TestDAG_GetVertex(t *testing.T) {
 	v2 := foobar{A: "foo", B: "bar"}
 	var v3 foobar
 	k2, _ := d.AddVertex(v2)
-	err = d.GetVertex(k2, &v3)
-	if err != nil {
-		t.Errorf("failed to GetVertex(): %v", err)
+	errVert2 := d.GetVertex(k2, &v3)
+	if errVert2 != nil {
+		t.Error(errVert2)
 	}
 	if deep.Equal(v2, v3) != nil {
 		t.Errorf("GetVertex() = %v, want %v", v3, v2)
@@ -140,9 +91,9 @@ func TestDAG_GetVertex(t *testing.T) {
 	v4 := foobarKey{A: "foo", B: "bar", Key: "myFancyKey"}
 	var v5 foobarKey
 	k4, _ := d.AddVertex(v4)
-	err = d.GetVertex(k4, &v5)
-	if err != nil {
-		t.Errorf("failed to GetVertex(): %v", err)
+	errVert3 := d.GetVertex(k4, &v5)
+	if errVert3 != nil {
+		t.Error(errVert3)
 	}
 	if deep.Equal(v4, v5) != nil {
 		t.Errorf("GetVertex() = %v, want %v", v5, v4)
@@ -166,7 +117,7 @@ func TestDAG_GetOrder(t *testing.T) {
 	d := someNewDag(t)
 	order, err := d.GetOrder()
 	if err != nil {
-		t.Errorf("failed to GetOrder(): %v", err)
+		t.Error(err)
 	}
 	if order != 0 {
 		t.Errorf("GetOrder() = %d, want %d", order, 0)
@@ -176,7 +127,7 @@ func TestDAG_GetOrder(t *testing.T) {
 		_, _ = d.AddVertex(idVertex{Key: strconv.Itoa(i)})
 		order, err = d.GetOrder()
 		if err != nil {
-			t.Errorf("failed to GetOrder(): %v", err)
+			t.Error(err)
 		}
 		if int(order) != i {
 			t.Errorf("GetOrder() = %d, want %d", order, 1)
@@ -184,232 +135,58 @@ func TestDAG_GetOrder(t *testing.T) {
 	}
 }
 
-func TestDAG_AddEdge(t *testing.T) {
-	d := someNewDag(t)
-	k1, _ := d.AddVertex(idVertex{"0"})
-	k2, _ := d.AddVertex(idVertex{"1"})
-
-	// adding edge
-	errAddEdge := d.AddEdge(k1, k2)
-	if errAddEdge != nil {
-		t.Errorf("AddEdge() failed: %v", errAddEdge)
-	}
-
-	// after adding edge
-	isEdge, errIsEdge := d.IsEdge(k1, k2)
-	if errIsEdge != nil {
-		t.Errorf("IsEdge() failed: %v", errIsEdge)
-	}
-	if !isEdge {
-		t.Errorf("IsEdge() = %t, want %t", isEdge, true)
-	}
-	size, errSize := d.GetSize()
-	if errSize != nil {
-		t.Errorf("GetSize() failed: %v", errSize)
-	}
-	if size != 1 {
-		t.Errorf("GetSize() = %d, want 1", size)
-	}
-
-	// adding duplicate
-	errAddEdgeDuplicate := d.AddEdge(k1, k2)
-	if errAddEdgeDuplicate == nil {
-		t.Errorf("AddEdge() succeeded, want error")
-	}
-
-	// adding edge for unknown vertex
-	errAddEdgeUnknown := d.AddEdge(k1, "3")
-	if errAddEdgeUnknown == nil {
-		t.Errorf("AddEdge() succeeded, want error")
-	}
-
-	// loop
-	errAddEdgeLoop := d.AddEdge(k2, k1)
-	if errAddEdgeLoop == nil {
-		t.Errorf("AddEdge() succeeded, want error")
-	}
-
-	// loop self
-	errAddEdgeLoopSelf := d.AddEdge(k2, k2)
-	if errAddEdgeLoopSelf == nil {
-		t.Errorf("AddEdge() succeeded, want error")
-	}
-
-}
-
-func TestDAG_IsEdge(t *testing.T) {
-	d := someNewDag(t)
-	k1, _ := d.AddVertex(idVertex{"0"})
-	k2, _ := d.AddVertex(idVertex{"1"})
-
-	// before adding the edge
-	isEdge, errIsEdge := d.IsEdge(k1, k2)
-	if errIsEdge != nil {
-		t.Errorf("IsEdge() failed: %v", errIsEdge)
-	}
-	if isEdge {
-		t.Errorf("IsEdge() = %t, want %t", isEdge, false)
-	}
-
-	// adding edge
-	errAddEdge := d.AddEdge(k1, k2)
-	if errAddEdge != nil {
-		t.Errorf("AddEdge() failed: %v", errAddEdge)
-	}
-
-	// after adding edge
-	isEdge2, errIsEdge2 := d.IsEdge(k1, k2)
-	if errIsEdge2 != nil {
-		t.Errorf("IsEdge() failed: %v", errIsEdge2)
-	}
-	if !isEdge2 {
-		t.Errorf("IsEdge() = %t, want %t", isEdge2, true)
-	}
-}
-
-func TestDAG_GetSize(t *testing.T) {
-	d := someNewDag(t)
-	size, err := d.GetSize()
-	if err != nil {
-		t.Errorf("failed to GetSize(): %v", err)
-	}
-	if size != 0 {
-		t.Errorf("GetSize() = %d, want %d", size, 0)
-	}
-
-	for i := 1; i <= 9; i++ {
-		id1, _ := d.AddVertex(idVertex{strconv.Itoa(i * 10)})
-		id2, _ := d.AddVertex(idVertex{strconv.Itoa(i*10 + 1)})
-		_ = d.AddEdge(id1, id2)
-		size, err := d.GetSize()
-		if err != nil {
-			t.Errorf("failed to GetSize(): %v", err)
-		}
-		if int(size) != i {
-			t.Errorf("GetSize() = %d, want %d", size, 1)
-		}
-	}
-}
-
-
-func TestDAG_GetShortestPath(t *testing.T) {
+func TestDAG_GetVertices(t *testing.T) {
 	d := someNewDag(t)
 	_, _ = d.AddVertex(idVertex{"0"})
-	_, _ = d.AddVertex(idVertex{"1"})
-	_, _ = d.AddVertex(idVertex{"2"})
-	_, _ = d.AddVertex(idVertex{"3"})
-	_, _ = d.AddVertex(idVertex{"4"})
-	_ = d.AddEdge("0", "1")
-	_ = d.AddEdge("1", "2")
-	_ = d.AddEdge("2", "3")
-	_ = d.AddEdge("3", "4")
 
-	// path exists
-	path, err := d.GetShortestPath("0", "4")
-	if err != nil {
-		t.Errorf("failed to GetShortestPath(): %v", err)
-	}
-	want := []string{"0", "1", "2", "3", "4"}
-	if deep.Equal(path, want) != nil {
-		t.Errorf("GetShortestPath() = %v, want %v", path, want)
-	}
-
-	// path doesn't exist
-	_, _ = d.AddVertex(idVertex{"5"})
-	path2, err2 := d.GetShortestPath("0", "5")
-	if err2 != nil {
-		t.Errorf("failed to GetShortestPath(): %v", err2)
-	}
-	var want2 []string
-	if deep.Equal(path2, want2) != nil {
-		t.Errorf("GetShortestPath() = %v, want %v", path2, want2)
-	}
-
-	// alternate path
-	_ = d.AddEdge("0", "3")
-	path3, err3 := d.GetShortestPath("0", "4")
-	if err3 != nil {
-		t.Errorf("failed to GetShortestPath(): %v", err3)
-	}
-	want3 := []string{"0", "3", "4"}
-	if deep.Equal(path3, want3) != nil {
-		t.Errorf("GetShortestPath() = %v, want %v", path3, want3)
-	}
-
-	// 2 shortest paths pick the BFS first one
-	_ = d.AddEdge("1", "4")
-	path4, err4 := d.GetShortestPath("0", "4")
-	if err4 != nil {
-		t.Errorf("failed to GetShortestPath(): %v", err4)
-	}
-	want4 := []string{"0", "1", "4"}
-	if deep.Equal(path4, want4) != nil {
-		t.Errorf("GetShortestPath() = %v, want %v", path4, want4)
-	}
-}
-
-
-func TestDAG_WalkAncestors(t *testing.T) {
-	d := someNewDag(t)
-	_, _ = d.AddVertex(idVertex{"0"})
-	_, _ = d.AddVertex(idVertex{"1"})
-	_, _ = d.AddVertex(idVertex{"2"})
-	_, _ = d.AddVertex(idVertex{"3"})
-	_, _ = d.AddVertex(idVertex{"4"})
-	_ = d.AddEdge("0", "1")
-	_ = d.AddEdge("1", "2")
-	_ = d.AddEdge("2", "3")
-	_ = d.AddEdge("3", "4")
-
-
-	// simple chain BFS
+	// start is leave
+	chanKeys, chanErrors, chanSignal := d.GetVertices()
+	defer close(chanSignal)
 	var collect []string
-	_ = d.WalkAncestors("4", func(key string, err error) error {
+	for key := range chanKeys {
 		collect = append(collect, key)
-		return nil
-	}, false)
-	want := []string{"3", "2", "1", "0"}
+	}
+	for errWalk := range chanErrors {
+		t.Error(errWalk)
+	}
+	want := []string{"0"}
 	if deep.Equal(collect, want) != nil {
-		t.Errorf("WalkAncestors() = %v, want %v", collect, want)
+		t.Errorf("GetVertices() = %v, want %v", collect, want)
 	}
 
+	// two vertices
+	_, _ = d.AddVertex(idVertex{"1"})
+	chanKeys1, chanErrors1, chanSignal1 := d.GetVertices()
+	defer close(chanSignal1)
+	var collect1 []string
+	for key := range chanKeys1 {
+		collect1 = append(collect1, key)
+	}
+	for errWalk := range chanErrors1 {
+		t.Error(errWalk)
+	}
+	want1 := []string{"0", "1"}
+	if deep.Equal(collect1, want1) != nil {
+		t.Errorf("GetVertices() = %v, want %v", collect1, want1)
+	}
 
-	// two parents BFS
+	// 10 leaves
+	for i := 2; i < 10; i++ {
+		dstKey := strconv.Itoa(i)
+		_, _ = d.AddVertex(idVertex{dstKey})
+	}
+	chanKeys2, chanErrors2, chanSignal2 := d.GetVertices()
+	defer close(chanSignal2)
 	var collect2 []string
-	key, _ := d.AddVertex(idVertex{"0a"})
-	_ = d.AddEdge(key, "1")
-	_ = d.WalkAncestors("4", func(key string, err error) error {
+	for key := range chanKeys2 {
 		collect2 = append(collect2, key)
-		return nil
-	}, false)
-	want2 := []string{"3", "2", "1", "0a", "0"}
+	}
+	for errWalk := range chanErrors2 {
+		t.Error(errWalk)
+	}
+	want2 := []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"}
 	if deep.Equal(collect2, want2) != nil {
-		t.Errorf("WalkAncestors() = %v, want %v", collect2, want2)
-	}
-
-	// rhombus BFS
-	var collect3 []string
-	key, _ = d.AddVertex(idVertex{"2a"})
-	_ = d.AddEdge("1", key)
-	_ = d.AddEdge(key, "3")
-	_ = d.WalkAncestors("4", func(key string, err error) error {
-		collect3 = append(collect3, key)
-		return nil
-	}, false)
-	want3 := []string{"3", "2a", "2", "1", "0a", "0"}
-	if deep.Equal(collect3, want3) != nil {
-		t.Errorf("WalkAncestors() = %v, want %v", collect3, want3)
-	}
-
-	// rhombus DFS
-	var collect4 []string
-	_ = d.WalkAncestors("4", func(key string, err error) error {
-		collect4 = append(collect4, key)
-		return nil
-	}, true)
-	want4 := []string{"3", "2", "1", "0", "0a", "2a"}
-	if deep.Equal(collect4, want4) != nil {
-		t.Errorf("WalkAncestors() = %v, want %v", collect3, want3)
+		t.Errorf("GetVertices() = %v, want %v", collect2, want2)
 	}
 }
 
@@ -432,10 +209,9 @@ func TestDAG_GetLeaves(t *testing.T) {
 		t.Errorf("GetLeaves() = %v, want %v", collect, want)
 	}
 
+	// one "real" leave
 	_, _ = d.AddVertex(idVertex{"1"})
 	_ = d.AddEdge("0", "1")
-
-	// one "real" leave
 	chanKeys1, chanErrors1, chanSignal1 := d.GetLeaves()
 	defer close(chanSignal1)
 	var collect1 []string
@@ -490,10 +266,9 @@ func TestDAG_GetRoots(t *testing.T) {
 		t.Errorf("GetRoots() = %v, want %v", collect, want)
 	}
 
+	// one "real" root
 	_, _ = d.AddVertex(idVertex{"1"})
 	_ = d.AddEdge("0", "1")
-
-	// one "real" root
 	chanKeys1, chanErrors1, chanSignal1 := d.GetRoots()
 	defer close(chanSignal1)
 	var collect1 []string
@@ -546,9 +321,310 @@ func TestDAG_GetRoots(t *testing.T) {
 	if deep.Equal(collect3, want3) != nil {
 		t.Errorf("GetRoots() = %v, want %v", collect3, want3)
 	}
-
-
 }
+
+func TestDAG_AddEdge(t *testing.T) {
+	d := someNewDag(t)
+	k1, _ := d.AddVertex(idVertex{"0"})
+	k2, _ := d.AddVertex(idVertex{"1"})
+
+	// adding edge
+	errAddEdge := d.AddEdge(k1, k2)
+	if errAddEdge != nil {
+		t.Errorf("AddEdge() failed: %v", errAddEdge)
+	}
+
+	// after adding edge
+	isEdge, errIsEdge := d.EdgeExists(k1, k2)
+	if errIsEdge != nil {
+		t.Error(errIsEdge)
+	}
+	if !isEdge {
+		t.Errorf("EdgeExists() = %t, want %t", isEdge, true)
+	}
+	size, errSize := d.GetSize()
+	if errSize != nil {
+		t.Error(errSize)
+	}
+	if size != 1 {
+		t.Errorf("GetSize() = %d, want 1", size)
+	}
+
+	// adding duplicate
+	errAddEdgeDuplicate := d.AddEdge(k1, k2)
+	if errAddEdgeDuplicate == nil {
+		t.Errorf("AddEdge() succeeded, want error")
+	}
+
+	// adding edge for unknown vertex
+	errAddEdgeUnknown := d.AddEdge(k1, "3")
+	if errAddEdgeUnknown == nil {
+		t.Errorf("AddEdge() succeeded, want error")
+	}
+
+	// loop
+	errAddEdgeLoop := d.AddEdge(k2, k1)
+	if errAddEdgeLoop == nil {
+		t.Errorf("AddEdge() succeeded, want error")
+	}
+
+	// loop self
+	errAddEdgeLoopSelf := d.AddEdge(k2, k2)
+	if errAddEdgeLoopSelf == nil {
+		t.Errorf("AddEdge() succeeded, want error")
+	}
+}
+
+func TestDAG_EdgeExists(t *testing.T) {
+	d := someNewDag(t)
+	k1, _ := d.AddVertex(idVertex{"0"})
+	k2, _ := d.AddVertex(idVertex{"1"})
+
+	// before adding the edge
+	isEdge, errIsEdge := d.EdgeExists(k1, k2)
+	if errIsEdge != nil {
+		t.Error(errIsEdge)
+	}
+	if isEdge {
+		t.Errorf("EdgeExists() = %t, want %t", isEdge, false)
+	}
+
+	// adding edge
+	errAddEdge := d.AddEdge(k1, k2)
+	if errAddEdge != nil {
+		t.Error(errAddEdge)
+	}
+
+	// after adding edge
+	isEdge2, errIsEdge2 := d.EdgeExists(k1, k2)
+	if errIsEdge2 != nil {
+		t.Error(errIsEdge2)
+	}
+	if !isEdge2 {
+		t.Errorf("EdgeExists() = %t, want %t", isEdge2, true)
+	}
+}
+
+func TestDAG_GetSize(t *testing.T) {
+	d := someNewDag(t)
+	size, err := d.GetSize()
+	if err != nil {
+		t.Errorf("failed to GetSize(): %v", err)
+	}
+	if size != 0 {
+		t.Errorf("GetSize() = %d, want %d", size, 0)
+	}
+
+	for i := 1; i <= 9; i++ {
+		id1, _ := d.AddVertex(idVertex{strconv.Itoa(i * 10)})
+		id2, _ := d.AddVertex(idVertex{strconv.Itoa(i*10 + 1)})
+		_ = d.AddEdge(id1, id2)
+		size, err := d.GetSize()
+		if err != nil {
+			t.Errorf("failed to GetSize(): %v", err)
+		}
+		if int(size) != i {
+			t.Errorf("GetSize() = %d, want %d", size, 1)
+		}
+	}
+}
+
+func TestDAG_GetShortestPath(t *testing.T) {
+	d := someNewDag(t)
+	_, _ = d.AddVertex(idVertex{"0"})
+	_, _ = d.AddVertex(idVertex{"1"})
+	_, _ = d.AddVertex(idVertex{"2"})
+	_, _ = d.AddVertex(idVertex{"3"})
+	_, _ = d.AddVertex(idVertex{"4"})
+	_ = d.AddEdge("0", "1")
+	_ = d.AddEdge("1", "2")
+	_ = d.AddEdge("2", "3")
+	_ = d.AddEdge("3", "4")
+
+	// path exists
+	chanKeys, chanErrors, chanSignal, errorGSP := d.GetShortestPath("0", "4")
+	if errorGSP != nil {
+		t.Error(errorGSP)
+	}
+	defer close(chanSignal)
+	var collect []string
+	for key := range chanKeys {
+		collect = append(collect, key)
+	}
+	for errWalk := range chanErrors {
+		t.Error(errWalk)
+	}
+	want := []string{"0", "1", "2", "3", "4"}
+	if deep.Equal(collect, want) != nil {
+		t.Errorf("GetShortestPath() = %v, want %v", collect, want)
+	}
+
+	// path doesn't exist
+	_, _ = d.AddVertex(idVertex{"5"})
+	chanKeys1, chanErrors1, chanSignal1, errorGSP1 := d.GetShortestPath("0", "4")
+	if errorGSP1 != nil {
+		t.Error(errorGSP1)
+	}
+	defer close(chanSignal1)
+	var collect1 []string
+	for key := range chanKeys1 {
+		collect = append(collect1, key)
+	}
+	for errWalk := range chanErrors1 {
+		t.Error(errWalk)
+	}
+	var want1 []string
+	if deep.Equal(collect1, want1) != nil {
+		t.Errorf("GetShortestPath() = %v, want %v", collect1, want1)
+	}
+
+	// alternate path
+	_ = d.AddEdge("0", "3")
+	chanKeys2, _, _, _ := d.GetShortestPath("0", "4")
+	var collect2 []string
+	for key := range chanKeys2 {
+		collect2 = append(collect2, key)
+	}
+	want2 := []string{"0", "3", "4"}
+	if deep.Equal(collect2, want2) != nil {
+		t.Errorf("GetShortestPath() = %v, want %v", collect2, want2)
+	}
+
+	// 2 shortest paths pick the BFS first one
+	_ = d.AddEdge("1", "4")
+	chanKeys3, _, _, _ := d.GetShortestPath("0", "4")
+	var collect3 []string
+	for key := range chanKeys3 {
+		collect3 = append(collect3, key)
+	}
+	want3 := []string{"0", "1", "4"}
+	if deep.Equal(collect3, want3) != nil {
+		t.Errorf("GetShortestPath() = %v, want %v", collect3, want3)
+	}
+}
+
+func TestDAG_GetAncestors(t *testing.T) {
+	d := someNewDag(t)
+	_, _ = d.AddVertex(idVertex{"0"})
+	_, _ = d.AddVertex(idVertex{"1"})
+	_, _ = d.AddVertex(idVertex{"2"})
+	_, _ = d.AddVertex(idVertex{"3"})
+	_, _ = d.AddVertex(idVertex{"4"})
+	_ = d.AddEdge("0", "1")
+	_ = d.AddEdge("1", "2")
+	_ = d.AddEdge("2", "3")
+	_ = d.AddEdge("3", "4")
+
+	// simple chain BFS
+	chanKeys, chanErrors, chanSignal, errorGA := d.GetAncestors("4", false)
+	if errorGA != nil {
+		t.Error(errorGA)
+	}
+	defer close(chanSignal)
+	var collect []string
+	for key := range chanKeys {
+		collect = append(collect, key)
+	}
+	for errWalk := range chanErrors {
+		t.Error(errWalk)
+	}
+	want := []string{"3", "2", "1", "0"}
+	if deep.Equal(collect, want) != nil {
+		t.Errorf("GetAncestors() = %v, want %v", collect, want)
+	}
+
+	// two parents BFS
+	_, _ = d.AddVertex(idVertex{"0a"})
+	_ = d.AddEdge("0a", "1")
+	chanKeys1, _, chanSignal1, _ := d.GetAncestors("4", false)
+	defer close(chanSignal1)
+	var collect1 []string
+	for key := range chanKeys1 {
+		collect1 = append(collect1, key)
+	}
+	want1 := []string{"3", "2", "1", "0a", "0"}
+	if deep.Equal(collect1, want1) != nil {
+		t.Errorf("GetAncestors() = %v, want %v", collect1, want1)
+	}
+
+	// rhombus BFS
+	_, _ = d.AddVertex(idVertex{"2a"})
+	_ = d.AddEdge("1", "2a")
+	_ = d.AddEdge("2a", "3")
+	chanKeys2, _, chanSignal2, _ := d.GetAncestors("4", false)
+	defer close(chanSignal2)
+	var collect2 []string
+	for key := range chanKeys2 {
+		collect2 = append(collect2, key)
+	}
+	want2 := []string{"3", "2a", "2", "1", "0a", "0"}
+	if deep.Equal(collect2, want2) != nil {
+		t.Errorf("GetAncestors() = %v, want %v", collect2, want2)
+	}
+
+	// rhombus DFS
+	chanKeys3, _, chanSignal3, _ := d.GetAncestors("4", true)
+	defer close(chanSignal3)
+	var collect3 []string
+	for key := range chanKeys3 {
+		collect3 = append(collect3, key)
+	}
+	want3 := []string{"3", "2", "1", "0", "0a", "2a"}
+	if deep.Equal(collect3, want3) != nil {
+		t.Errorf("GetAncestors() = %v, want %v", collect3, want3)
+	}
+}
+
+
+
+func someNewDag(t *testing.T) *DAG {
+
+	// get arangdb host and port from environment
+	host := os.Getenv("ARANGODB_HOST")
+	if host == "" {
+		host = "localhost"
+	}
+	port := os.Getenv("ARANGODB_PORT")
+	if port == "" {
+		port = "8529"
+	}
+
+	// new connection
+	conn, err := http.NewConnection(http.ConnectionConfig{
+		Endpoints: []string{fmt.Sprintf("http://%s:%s", host, port)},
+	})
+	if err != nil {
+		t.Fatalf("failed to setup connection: %v", err)
+	}
+
+	// new client
+	client, err := driver.NewClient(driver.ClientConfig{
+		Connection: conn,
+	})
+	if err != nil {
+		t.Fatalf("failed to setup client: %v", err)
+	}
+
+	dbName := someName()
+	vertexCollName := someName()
+	edgeCollName := someName()
+
+	d, err := NewDAG(dbName, vertexCollName, edgeCollName, client)
+	if err != nil {
+		t.Fatalf("failed to setup new dag: %v", err)
+	}
+	return d
+}
+
+func someName() string {
+	//return fmt.Sprintf("test_%s", uuid.New().String())
+	return fmt.Sprintf("test_%d", time.Now().UnixNano())
+}
+
+type idVertex struct {
+	Key string `json:"_key"`
+}
+
 /*
 func DeleteVertexTest(d DAG, t *testing.T) {
 
@@ -1109,7 +1185,7 @@ func InterfaceTests(t *testing.T, newFn func() dag.DAG, tests []func(dag.DAG, *t
 	}{
 		{name: "NewDAG()", fn: newDAG},
 		{name: "AddVertex()", fn: addVertex},
-		{name: "GetVertex()", fn: getVertex},
+		{name: "GetVertex()", fn: getVertexId},
 		{name: "DeleteVertex()", fn: deleteVertex},
 		{name: "AddEdge()", fn: addEdge},
 		{name: "DeleteEdge()", fn: deleteEdge},
