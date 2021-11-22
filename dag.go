@@ -270,14 +270,9 @@ func (d *DAG) GetSize() (uint64, error) {
 	return uint64(count), nil
 }
 
-// GetLeaves returns the leaves below src. If src is itself a leave it returns
-// src (i.e. if src exists, GetLeaves returns at least one leave).
-func (d *DAG) GetLeaves(src string) ([]string, error) {
-	srcId, errSrc := d.getVertex(src, nil)
-	if errSrc != nil {
-		return nil, errSrc
-	}
-	leaves, errLeaves := d.getLeaves(srcId)
+// GetLeaves returns the leaves of the DAG.
+func (d *DAG) GetLeaves() ([]string, error) {
+	leaves, errLeaves := d.getLeaves()
 	if errLeaves != nil {
 		return nil, errLeaves
 	}
@@ -291,17 +286,17 @@ func (d *DAG) GetLeaves(src string) ([]string, error) {
 	return result, nil
 }
 
-func (d *DAG) getLeaves(srcId string) ([]driver.DocumentMeta, error) {
+func (d *DAG) getLeaves() ([]driver.DocumentMeta, error) {
 
 	var result []driver.DocumentMeta
 
 	ctx := context.Background()
-	query := "FOR v IN 0..10000 OUTBOUND @from @@collection " +
-				"FILTER LENGTH(FOR vv IN OUTBOUND v @@collection LIMIT 1 RETURN 1) == 0 " +
+	query := "FOR v IN @@vertexCollection " +
+				"FILTER LENGTH(FOR vv IN 1..1 OUTBOUND v @@edgeCollection LIMIT 1 RETURN 1) == 0 " +
 				"RETURN v"
 	bindVars := map[string]interface{}{
-		"@collection": d.edges.Name(),
-		"from": srcId,
+		"@vertexCollection": d.vertices.Name(),
+		"@edgeCollection": d.edges.Name(),
 	}
 
 	cursor, err := d.db.Query(ctx, query, bindVars)

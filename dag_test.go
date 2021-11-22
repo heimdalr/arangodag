@@ -418,7 +418,7 @@ func TestDAG_GetLeaves(t *testing.T) {
 	_, _ = d.AddVertex(idVertex{"0"})
 
 	// start is leave
-	leaves, err := d.GetLeaves("0")
+	leaves, err := d.GetLeaves()
 	if err != nil {
 		t.Errorf("failed to GetLeaves(): %v", err)
 	}
@@ -431,7 +431,7 @@ func TestDAG_GetLeaves(t *testing.T) {
 	_ = d.AddEdge("0", "1")
 
 	// one "real" leave
-	leaves2, err2 := d.GetLeaves("0")
+	leaves2, err2 := d.GetLeaves()
 	if err2 != nil {
 		t.Errorf("failed to GetLeaves(): %v", err2)
 	}
@@ -446,7 +446,7 @@ func TestDAG_GetLeaves(t *testing.T) {
 		_, _ = d.AddVertex(idVertex{dstKey})
 		_ = d.AddEdge("0", dstKey)
 	}
-	leaves3, err3 := d.GetLeaves("0")
+	leaves3, err3 := d.GetLeaves()
 	if err3 != nil {
 		t.Errorf("failed to GetLeaves(): %v", err3)
 	}
