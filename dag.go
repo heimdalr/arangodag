@@ -1,3 +1,5 @@
+// Package arangodag implements directed acyclic graphs (DAGs) on top of ArangoDB.
+
 package arangodag
 
 import (
