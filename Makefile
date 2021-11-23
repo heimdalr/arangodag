@@ -22,4 +22,10 @@ test:
 lint:
 	golangci-lint run
 
+coverage:
+	go test -coverprofile=c.out && go tool cover -html=c.out
+
+clean:
+	rm -f c.out
+
 .PHONY: start_db stop_db test
