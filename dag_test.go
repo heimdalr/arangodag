@@ -143,7 +143,7 @@ func collector(t *testing.T, cursor driver.Cursor, errFn error) []string {
 	if errFn != nil {
 		t.Fatal(errFn)
 	}
-	defer func(){
+	defer func() {
 		errClose := cursor.Close()
 		if errClose != nil {
 			t.Error(errClose)
@@ -165,47 +165,46 @@ func collector(t *testing.T, cursor driver.Cursor, errFn error) []string {
 	return collect
 }
 
-
 func TestDAG_GetVertices(t *testing.T) {
 	tests := []struct {
-		d *arangodag.DAG
-		name  string
+		d       *arangodag.DAG
+		name    string
 		prepare func(d *arangodag.DAG)
-		want  []string
+		want    []string
 	}{
 		{
-			d: someNewDag(t),
+			d:       someNewDag(t),
 			name:    "no vertex",
 			prepare: func(d *arangodag.DAG) {},
 			want:    nil,
 		},
 		{
-			d: someNewDag(t),
-			name:    "single vertex",
+			d:    someNewDag(t),
+			name: "single vertex",
 			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 			},
-			want:    []string{"0"},
+			want: []string{"0"},
 		},
 		{
-			d: someNewDag(t),
-			name:    "two vertices",
+			d:    someNewDag(t),
+			name: "two vertices",
 			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 				_, _ = d.AddVertex(idVertex{"1"})
 			},
-			want:    []string{"0", "1"},
+			want: []string{"0", "1"},
 		},
 		{
-			d: someNewDag(t),
-			name:    "10 vertices",
+			d:    someNewDag(t),
+			name: "10 vertices",
 			prepare: func(d *arangodag.DAG) {
 				for i := 0; i < 10; i++ {
 					dstKey := strconv.Itoa(i)
 					_, _ = d.AddVertex(idVertex{dstKey})
 				}
 			},
-			want:    []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"},
+			want: []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"},
 		},
 	}
 	for _, tt := range tests {
@@ -222,38 +221,38 @@ func TestDAG_GetVertices(t *testing.T) {
 
 func TestDAG_GetLeaves(t *testing.T) {
 	tests := []struct {
-		d *arangodag.DAG
-		name  string
+		d       *arangodag.DAG
+		name    string
 		prepare func(d *arangodag.DAG)
-		want  []string
+		want    []string
 	}{
 		{
-			d: someNewDag(t),
+			d:       someNewDag(t),
 			name:    "no vertex",
 			prepare: func(d *arangodag.DAG) {},
 			want:    nil,
 		},
 		{
-			d: someNewDag(t),
-			name:    "single vertex",
+			d:    someNewDag(t),
+			name: "single vertex",
 			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 			},
-			want:    []string{"0"},
+			want: []string{"0"},
 		},
 		{
-			d: someNewDag(t),
-			name:    "one \"real\" leave",
+			d:    someNewDag(t),
+			name: "one \"real\" leave",
 			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 				_, _ = d.AddVertex(idVertex{"1"})
 				_ = d.AddEdge("0", "1")
 			},
-			want:    []string{"1"},
+			want: []string{"1"},
 		},
 		{
-			d: someNewDag(t),
-			name:    "10 leaves",
+			d:    someNewDag(t),
+			name: "10 leaves",
 			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 				for i := 1; i < 10; i++ {
@@ -262,7 +261,7 @@ func TestDAG_GetLeaves(t *testing.T) {
 					_ = d.AddEdge("0", dstKey)
 				}
 			},
-			want:    []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"},
+			want: []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"},
 		},
 	}
 	for _, tt := range tests {
@@ -279,38 +278,38 @@ func TestDAG_GetLeaves(t *testing.T) {
 
 func TestDAG_GetRoots(t *testing.T) {
 	tests := []struct {
-		d *arangodag.DAG
-		name  string
+		d       *arangodag.DAG
+		name    string
 		prepare func(d *arangodag.DAG)
-		want  []string
+		want    []string
 	}{
 		{
-			d: someNewDag(t),
+			d:       someNewDag(t),
 			name:    "no vertex",
 			prepare: func(d *arangodag.DAG) {},
 			want:    nil,
 		},
 		{
-			d: someNewDag(t),
-			name:    "single vertex",
+			d:    someNewDag(t),
+			name: "single vertex",
 			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 			},
-			want:    []string{"0"},
+			want: []string{"0"},
 		},
 		{
-			d: someNewDag(t),
-			name:    "one \"real\" root",
+			d:    someNewDag(t),
+			name: "one \"real\" root",
 			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 				_, _ = d.AddVertex(idVertex{"1"})
 				_ = d.AddEdge("0", "1")
 			},
-			want:    []string{"0"},
+			want: []string{"0"},
 		},
 		{
-			d: someNewDag(t),
-			name:    "10 leaves",
+			d:    someNewDag(t),
+			name: "10 leaves",
 			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 				_, _ = d.AddVertex(idVertex{"1"})
@@ -321,7 +320,7 @@ func TestDAG_GetRoots(t *testing.T) {
 					_ = d.AddEdge(srcKey, "1")
 				}
 			},
-			want:    []string{"0", "2", "3", "4", "5", "6", "7", "8", "9"},
+			want: []string{"0", "2", "3", "4", "5", "6", "7", "8", "9"},
 		},
 	}
 	for _, tt := range tests {
@@ -338,32 +337,32 @@ func TestDAG_GetRoots(t *testing.T) {
 
 func TestDAG_AddEdge(t *testing.T) {
 	tests := []struct {
-		d *arangodag.DAG
-		name  string
+		d       *arangodag.DAG
+		name    string
 		prepare func(d *arangodag.DAG)
-		want  error
-		srcKey string
-		dstKey string
+		want    error
+		srcKey  string
+		dstKey  string
 	}{
 		{
-			d:       someNewDag(t),
-			name:    "happy path",
+			d:    someNewDag(t),
+			name: "happy path",
 			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 				_, _ = d.AddVertex(idVertex{"1"})
 			},
-			want:    nil,
+			want:   nil,
 			srcKey: "0",
 			dstKey: "1",
 		},
 		{
-			d:       someNewDag(t),
-			name:    "unknown Vertex",
+			d:    someNewDag(t),
+			name: "unknown Vertex",
 			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 				_, _ = d.AddVertex(idVertex{"1"})
 			},
-			want:    driver.ArangoError{
+			want: driver.ArangoError{
 				HasError:     true,
 				Code:         404,
 				ErrorNum:     1202,
@@ -373,8 +372,8 @@ func TestDAG_AddEdge(t *testing.T) {
 			dstKey: "2",
 		},
 		{
-			d:       someNewDag(t),
-			name:    "duplicate edge",
+			d:    someNewDag(t),
+			name: "duplicate edge",
 			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 				_, _ = d.AddVertex(idVertex{"1"})
@@ -383,13 +382,13 @@ func TestDAG_AddEdge(t *testing.T) {
 					t.Fatal(err)
 				}
 			},
-			want:    errors.New("duplicate edge"),
+			want:   errors.New("duplicate edge"),
 			srcKey: "0",
 			dstKey: "1",
 		},
 		{
-			d:       someNewDag(t),
-			name:    "loop",
+			d:    someNewDag(t),
+			name: "loop",
 			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 				_, _ = d.AddVertex(idVertex{"1"})
@@ -398,7 +397,7 @@ func TestDAG_AddEdge(t *testing.T) {
 					t.Fatal(err)
 				}
 			},
-			want:    errors.New("loop"),
+			want:   errors.New("loop"),
 			srcKey: "1",
 			dstKey: "0",
 		},
@@ -468,35 +467,34 @@ func TestDAG_GetSize(t *testing.T) {
 	}
 }
 
-
 func TestDAG_GetShortestPath(t *testing.T) {
 	d := standardDAG(t)
 	tests := []struct {
-		name  string
-		want  []string
+		name   string
+		want   []string
 		srcKey string
 		dstKey string
 	}{
 		{
-			name: "happy path",
+			name:   "happy path",
 			want:   []string{"2", "3", "4"},
 			srcKey: "2",
 			dstKey: "4",
 		},
 		{
-			name: "path doesn't exist",
+			name:   "path doesn't exist",
 			want:   nil,
 			srcKey: "0",
 			dstKey: "5",
 		},
 		{
-			name: "shortest path",
+			name:   "shortest path",
 			want:   []string{"1", "4"},
 			srcKey: "1",
 			dstKey: "4",
 		},
 		{
-			name: "two shortest paths, pick BFS",
+			name:   "two shortest paths, pick BFS",
 			want:   []string{"0", "1", "4"},
 			srcKey: "0",
 			dstKey: "4",
@@ -504,7 +502,7 @@ func TestDAG_GetShortestPath(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cursor, err :=d.GetShortestPath(tt.srcKey, tt.dstKey)
+			cursor, err := d.GetShortestPath(tt.srcKey, tt.dstKey)
 			got := collector(t, cursor, err)
 			if err != nil {
 				t.Error(err)
@@ -519,30 +517,29 @@ func TestDAG_GetShortestPath(t *testing.T) {
 func TestDAG_GetParents(t *testing.T) {
 	d := standardDAG(t)
 	tests := []struct {
-		name  string
-		want  []string
+		name   string
+		want   []string
 		srcKey string
 	}{
 		{
-			name: "no parents",
+			name:   "no parents",
 			want:   nil,
 			srcKey: "0",
 		},
 		{
-			name: "one parent",
+			name:   "one parent",
 			want:   []string{"1"},
 			srcKey: "2",
 		},
 		{
-			name: "two parents",
+			name:   "two parents",
 			want:   []string{"0", "2"},
 			srcKey: "3",
 		},
-
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cursor, err :=d.GetParents(tt.srcKey)
+			cursor, err := d.GetParents(tt.srcKey)
 			got := collector(t, cursor, err)
 			if err != nil {
 				t.Error(err)
@@ -557,52 +554,51 @@ func TestDAG_GetParents(t *testing.T) {
 func TestDAG_GetAncestors(t *testing.T) {
 	d := standardDAG(t)
 	tests := []struct {
-		name  string
-		want  []string
+		name   string
+		want   []string
 		srcKey string
-		dfs bool
+		dfs    bool
 	}{
 		{
-			name: "no ancestors",
+			name:   "no ancestors",
 			want:   nil,
 			srcKey: "0",
-			dfs: false,
+			dfs:    false,
 		},
 		{
-			name: "one ancestors",
+			name:   "one ancestors",
 			want:   []string{"0"},
 			srcKey: "1",
-			dfs: false,
+			dfs:    false,
 		},
 		{
-			name: "simple chain",
+			name:   "simple chain",
 			want:   []string{"1", "0"},
 			srcKey: "2",
-			dfs: false,
+			dfs:    false,
 		},
 		{
-			name: "several parents",
+			name:   "several parents",
 			want:   []string{"0", "2", "1"},
 			srcKey: "3",
-			dfs: false,
+			dfs:    false,
 		},
 		{
-			name: "several parents BFS",
-			want:   []string{"3","1", "0", "2"},
+			name:   "several parents BFS",
+			want:   []string{"3", "1", "0", "2"},
 			srcKey: "4",
-			dfs: false,
+			dfs:    false,
 		},
 		{
-			name: "several parents DFS",
-			want:   []string{"1","0", "3", "2"},
+			name:   "several parents DFS",
+			want:   []string{"1", "0", "3", "2"},
 			srcKey: "4",
-			dfs: true,
+			dfs:    true,
 		},
-
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cursor, err :=d.GetAncestors(tt.srcKey, tt.dfs)
+			cursor, err := d.GetAncestors(tt.srcKey, tt.dfs)
 			got := collector(t, cursor, err)
 			if err != nil {
 				t.Error(err)
@@ -617,52 +613,51 @@ func TestDAG_GetAncestors(t *testing.T) {
 func TestDAG_GetDescendants(t *testing.T) {
 	d := standardDAG(t)
 	tests := []struct {
-		name  string
-		want  []string
+		name   string
+		want   []string
 		srcKey string
-		dfs bool
+		dfs    bool
 	}{
 		{
-			name: "no descendants",
+			name:   "no descendants",
 			want:   nil,
 			srcKey: "4",
-			dfs: false,
+			dfs:    false,
 		},
 		{
-			name: "one descendant",
+			name:   "one descendant",
 			want:   []string{"4"},
 			srcKey: "3",
-			dfs: false,
+			dfs:    false,
 		},
 		{
-			name: "simple chain",
+			name:   "simple chain",
 			want:   []string{"3", "4"},
 			srcKey: "2",
-			dfs: false,
+			dfs:    false,
 		},
 		{
-			name: "several descendants",
+			name:   "several descendants",
 			want:   []string{"4", "2", "3"},
 			srcKey: "1",
-			dfs: false,
+			dfs:    false,
 		},
 		{
-			name: "several descendants BFS",
-			want:   []string{"3","1", "2", "4"},
+			name:   "several descendants BFS",
+			want:   []string{"3", "1", "2", "4"},
 			srcKey: "0",
-			dfs: false,
+			dfs:    false,
 		},
 		{
-			name: "several descendants DFS",
-			want:   []string{"1","2", "3", "4"},
+			name:   "several descendants DFS",
+			want:   []string{"1", "2", "3", "4"},
 			srcKey: "0",
-			dfs: true,
+			dfs:    true,
 		},
-
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cursor, err :=d.GetDescendants(tt.srcKey, tt.dfs)
+			cursor, err := d.GetDescendants(tt.srcKey, tt.dfs)
 			got := collector(t, cursor, err)
 			if err != nil {
 				t.Error(err)

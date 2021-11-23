@@ -16,6 +16,9 @@ stop_db:
 	docker stop arangodb-instance 2>/dev/null || true
 	docker rm arangodb-instance 2>/dev/null || true
 
+fmt:
+	gofmt -s -w .
+
 test:
 	go test -v ./...
 

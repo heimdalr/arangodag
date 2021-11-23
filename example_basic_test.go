@@ -19,12 +19,15 @@ func Example() {
 
 	// connect to DAG (create a new one if necessary)
 	uid := strconv.FormatInt(time.Now().UnixNano(), 10)
-	d, _ := arangodag.NewDAG("test-" + uid, "vertices-" + uid, "edges-" + uid, client)
+	d, _ := arangodag.NewDAG("test-"+uid, "vertices-"+uid, "edges-"+uid, client)
 
 	// add some vertices
-	key0, _ := d.AddVertex(struct{blah string}{"0"})
-	key1, _ := d.AddVertex(struct{foo string; bar string}{"1", "blub"})
-	key2, _ := d.AddVertex(struct{num int}{42})
+	key0, _ := d.AddVertex(struct{ blah string }{"0"})
+	key1, _ := d.AddVertex(struct {
+		foo string
+		bar string
+	}{"1", "blub"})
+	key2, _ := d.AddVertex(struct{ num int }{42})
 
 	// add some edges
 	_ = d.AddEdge(key0, key1)

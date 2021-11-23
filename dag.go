@@ -1,5 +1,4 @@
 // Package arangodag implements directed acyclic graphs (DAGs) on top of ArangoDB.
-
 package arangodag
 
 import (
@@ -180,7 +179,7 @@ func (d *DAG) AddEdge(srcKey, dstKey string) error {
 	}
 
 	// prevent duplicate edge
-	existsEdge, errEdge :=d.edgeExists(srcId, dstId)
+	existsEdge, errEdge := d.edgeExists(srcId, dstId)
 	if errEdge != nil {
 		return errEdge
 	}
@@ -254,7 +253,6 @@ func (d *DAG) GetShortestPath(srcKey, dstKey string) (driver.Cursor, error) {
 	return d.db.Query(ctx, query, bindVars)
 }
 
-
 // GetParents executes the query to retrieve all parents of the vertex with the key
 // srcKey. GetParents returns a cursor that may be used retrieve the vertices
 // one-by-one.
@@ -304,7 +302,7 @@ func (d *DAG) getRelatives(srcKey string, outbound bool, depth int, dfs bool) (d
 
 	// compute the query
 	// (somehow INBOUND/OUTBOUND can't be set via bindVars)
-	query := fmt.Sprintf("FOR v IN 1..@depth %s @from @@collection " +
+	query := fmt.Sprintf("FOR v IN 1..@depth %s @from @@collection "+
 		"OPTIONS {order: @order, uniqueVertices: @uniqueVertices} RETURN DISTINCT v", direction)
 	bindVars := map[string]interface{}{
 		"@collection":    d.edges.Name(),
@@ -317,8 +315,6 @@ func (d *DAG) getRelatives(srcKey string, outbound bool, depth int, dfs bool) (d
 	ctx := context.Background()
 	return d.db.Query(ctx, query, bindVars)
 }
-
-
 
 func (d *DAG) getVertexId(key string) (string, error) {
 	ctx := context.Background()
@@ -361,7 +357,6 @@ func (d *DAG) exists(query string, bindVars map[string]interface{}) (bool, error
 	}()
 	return cursor.Count() > 0, nil
 }
-
 
 /*
 func (d *DAG) getChildCount(id driver.DocumentID) (uint64, error) {
