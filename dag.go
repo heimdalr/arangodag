@@ -402,8 +402,4 @@ func (d *DAG) DeleteEdge(srcKey, dstKey string) error {
 	panic("implement me")
 }
 
-func (d *DAG) GetChildren(key string) (map[string]struct{}, error) {
-	panic("implement me")
-}
-
 */
