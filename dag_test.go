@@ -1,11 +1,14 @@
 package arangodag
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"github.com/arangodb/go-driver"
 	"github.com/arangodb/go-driver/http"
 	"github.com/go-test/deep"
 	"os"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -35,7 +38,7 @@ func TestDAG_AddVertex(t *testing.T) {
 		t.Error(errAdd1)
 	}
 	if autoId == "" {
-		t.Errorf("want id, got: %v", autoId)
+		t.Errorf("got: %v, want id", autoId)
 	}
 
 	// vertex with id
@@ -45,19 +48,19 @@ func TestDAG_AddVertex(t *testing.T) {
 		t.Error(errAdd2)
 	}
 	if idReturned != id {
-		t.Errorf("AddVertex() = '%s', want %s", idReturned, id)
+		t.Errorf("got '%s', want %s", idReturned, id)
 	}
 
 	// duplicate
 	_, errDuplicate := d.AddVertex(idVertex{Key: "1"})
 	if errDuplicate == nil {
-		t.Errorf("want duplicate Error")
+		t.Errorf("got 'nil', want duplicate Error")
 	}
 
 	// nil
 	_, errNil := d.AddVertex(nil)
 	if errNil == nil {
-		t.Errorf("want nil Error")
+		t.Errorf("got 'nil',want nil Error")
 	}
 }
 
@@ -72,7 +75,7 @@ func TestDAG_GetVertex(t *testing.T) {
 		t.Error(errVert1)
 	}
 	if deep.Equal(v0, v1) != nil {
-		t.Errorf("GetVertex() = %v, want %v", v1, v0)
+		t.Errorf("got %v, want %v", v1, v0)
 	}
 
 	// "complex" document without key
@@ -84,7 +87,7 @@ func TestDAG_GetVertex(t *testing.T) {
 		t.Error(errVert2)
 	}
 	if deep.Equal(v2, v3) != nil {
-		t.Errorf("GetVertex() = %v, want %v", v3, v2)
+		t.Errorf("got %v, want %v", v3, v2)
 	}
 
 	// "complex" document with key
@@ -96,20 +99,20 @@ func TestDAG_GetVertex(t *testing.T) {
 		t.Error(errVert3)
 	}
 	if deep.Equal(v4, v5) != nil {
-		t.Errorf("GetVertex() = %v, want %v", v5, v4)
+		t.Errorf("got %v, want %v", v5, v4)
 	}
 
 	// unknown
 	var v idVertex
 	errUnknown := d.GetVertex("foo", v)
 	if errUnknown == nil {
-		t.Errorf("want document not found")
+		t.Errorf("got 'nil', want document not found")
 	}
 
 	// empty
 	errEmpty := d.GetVertex("", v)
 	if errEmpty == nil {
-		t.Errorf("want key is empty")
+		t.Errorf("got 'nil', want key is empty")
 	}
 }
 
@@ -120,7 +123,7 @@ func TestDAG_GetOrder(t *testing.T) {
 		t.Error(err)
 	}
 	if order != 0 {
-		t.Errorf("GetOrder() = %d, want %d", order, 0)
+		t.Errorf("got %d, want %d", order, 0)
 	}
 
 	for i := 1; i <= 10; i++ {
@@ -130,248 +133,283 @@ func TestDAG_GetOrder(t *testing.T) {
 			t.Error(err)
 		}
 		if int(order) != i {
-			t.Errorf("GetOrder() = %d, want %d", order, 1)
+			t.Errorf("got %d, want %d", order, 1)
 		}
 	}
 }
 
-func TestDAG_GetVertices(t *testing.T) {
-	d := someNewDag(t)
-	_, _ = d.AddVertex(idVertex{"0"})
-
-	// start is leave
-	chanKeys, chanErrors, chanSignal := d.GetVertices()
-	defer close(chanSignal)
+func collector(t *testing.T, cursor driver.Cursor, errFn error) []string {
+	if errFn != nil {
+		t.Fatal(errFn)
+	}
+	defer func(){
+		errClose := cursor.Close()
+		if errClose != nil {
+			t.Error(errClose)
+		}
+	}()
+	ctx := context.Background()
+	var vertex driver.DocumentMeta
 	var collect []string
-	for key := range chanKeys {
-		collect = append(collect, key)
+	for {
+		_, errRead := cursor.ReadDocument(ctx, &vertex)
+		if driver.IsNoMoreDocuments(errRead) {
+			break
+		}
+		if errRead != nil {
+			t.Fatal(errRead)
+		}
+		collect = append(collect, vertex.Key)
 	}
-	for errWalk := range chanErrors {
-		t.Error(errWalk)
-	}
-	want := []string{"0"}
-	if deep.Equal(collect, want) != nil {
-		t.Errorf("GetVertices() = %v, want %v", collect, want)
-	}
+	return collect
+}
 
-	// two vertices
-	_, _ = d.AddVertex(idVertex{"1"})
-	chanKeys1, chanErrors1, chanSignal1 := d.GetVertices()
-	defer close(chanSignal1)
-	var collect1 []string
-	for key := range chanKeys1 {
-		collect1 = append(collect1, key)
-	}
-	for errWalk := range chanErrors1 {
-		t.Error(errWalk)
-	}
-	want1 := []string{"0", "1"}
-	if deep.Equal(collect1, want1) != nil {
-		t.Errorf("GetVertices() = %v, want %v", collect1, want1)
-	}
 
-	// 10 leaves
-	for i := 2; i < 10; i++ {
-		dstKey := strconv.Itoa(i)
-		_, _ = d.AddVertex(idVertex{dstKey})
+func TestDAG_GetVertices(t *testing.T) {
+	tests := []struct {
+		d *DAG
+		name  string
+		prepare func(d *DAG)
+		want  []string
+	}{
+		{
+			d: someNewDag(t),
+			name:    "no vertex",
+			prepare: func(d *DAG) {},
+			want:    nil,
+		},
+		{
+			d: someNewDag(t),
+			name:    "single vertex",
+			prepare: func(d *DAG) {
+				_, _ = d.AddVertex(idVertex{"0"})
+			},
+			want:    []string{"0"},
+		},
+		{
+			d: someNewDag(t),
+			name:    "two vertices",
+			prepare: func(d *DAG) {
+				_, _ = d.AddVertex(idVertex{"0"})
+				_, _ = d.AddVertex(idVertex{"1"})
+			},
+			want:    []string{"0", "1"},
+		},
+		{
+			d: someNewDag(t),
+			name:    "10 vertices",
+			prepare: func(d *DAG) {
+				for i := 0; i < 10; i++ {
+					dstKey := strconv.Itoa(i)
+					_, _ = d.AddVertex(idVertex{dstKey})
+				}
+			},
+			want:    []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"},
+		},
 	}
-	chanKeys2, chanErrors2, chanSignal2 := d.GetVertices()
-	defer close(chanSignal2)
-	var collect2 []string
-	for key := range chanKeys2 {
-		collect2 = append(collect2, key)
-	}
-	for errWalk := range chanErrors2 {
-		t.Error(errWalk)
-	}
-	want2 := []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"}
-	if deep.Equal(collect2, want2) != nil {
-		t.Errorf("GetVertices() = %v, want %v", collect2, want2)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.prepare(tt.d)
+			cursor, err := tt.d.GetVertices()
+			got := collector(t, cursor, err)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
 func TestDAG_GetLeaves(t *testing.T) {
-	d := someNewDag(t)
-	_, _ = d.AddVertex(idVertex{"0"})
-
-	// start is leave
-	chanKeys, chanErrors, chanSignal := d.GetLeaves()
-	defer close(chanSignal)
-	var collect []string
-	for key := range chanKeys {
-		collect = append(collect, key)
+	tests := []struct {
+		d *DAG
+		name  string
+		prepare func(d *DAG)
+		want  []string
+	}{
+		{
+			d: someNewDag(t),
+			name:    "no vertex",
+			prepare: func(d *DAG) {},
+			want:    nil,
+		},
+		{
+			d: someNewDag(t),
+			name:    "single vertex",
+			prepare: func(d *DAG) {
+				_, _ = d.AddVertex(idVertex{"0"})
+			},
+			want:    []string{"0"},
+		},
+		{
+			d: someNewDag(t),
+			name:    "one \"real\" leave",
+			prepare: func(d *DAG) {
+				_, _ = d.AddVertex(idVertex{"0"})
+				_, _ = d.AddVertex(idVertex{"1"})
+				_ = d.AddEdge("0", "1")
+			},
+			want:    []string{"1"},
+		},
+		{
+			d: someNewDag(t),
+			name:    "10 leaves",
+			prepare: func(d *DAG) {
+				_, _ = d.AddVertex(idVertex{"0"})
+				for i := 1; i < 10; i++ {
+					dstKey := strconv.Itoa(i)
+					_, _ = d.AddVertex(idVertex{dstKey})
+					_ = d.AddEdge("0", dstKey)
+				}
+			},
+			want:    []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"},
+		},
 	}
-	for errWalk := range chanErrors {
-		t.Error(errWalk)
-	}
-	want := []string{"0"}
-	if deep.Equal(collect, want) != nil {
-		t.Errorf("GetLeaves() = %v, want %v", collect, want)
-	}
-
-	// one "real" leave
-	_, _ = d.AddVertex(idVertex{"1"})
-	_ = d.AddEdge("0", "1")
-	chanKeys1, chanErrors1, chanSignal1 := d.GetLeaves()
-	defer close(chanSignal1)
-	var collect1 []string
-	for key := range chanKeys1 {
-		collect1 = append(collect1, key)
-	}
-	for errWalk := range chanErrors1 {
-		t.Error(errWalk)
-	}
-	want1 := []string{"1"}
-	if deep.Equal(collect1, want1) != nil {
-		t.Errorf("GetLeaves() = %v, want %v", collect1, want1)
-	}
-
-	// 10 leaves
-	for i := 2; i < 10; i++ {
-		dstKey := strconv.Itoa(i)
-		_, _ = d.AddVertex(idVertex{dstKey})
-		_ = d.AddEdge("0", dstKey)
-	}
-	chanKeys2, chanErrors2, chanSignal2 := d.GetLeaves()
-	defer close(chanSignal2)
-	var collect2 []string
-	for key := range chanKeys2 {
-		collect2 = append(collect2, key)
-	}
-	for errWalk := range chanErrors2 {
-		t.Error(errWalk)
-	}
-	want2 := []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}
-	if deep.Equal(collect2, want2) != nil {
-		t.Errorf("GetLeaves() = %v, want %v", collect2, want2)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.prepare(tt.d)
+			cursor, err := tt.d.GetLeaves()
+			got := collector(t, cursor, err)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
 func TestDAG_GetRoots(t *testing.T) {
-	d := someNewDag(t)
-	_, _ = d.AddVertex(idVertex{"0"})
-
-	// start is root
-	chanKeys, chanErrors, chanSignal := d.GetRoots()
-	defer close(chanSignal)
-	var collect []string
-	for key := range chanKeys {
-		collect = append(collect, key)
+	tests := []struct {
+		d *DAG
+		name  string
+		prepare func(d *DAG)
+		want  []string
+	}{
+		{
+			d: someNewDag(t),
+			name:    "no vertex",
+			prepare: func(d *DAG) {},
+			want:    nil,
+		},
+		{
+			d: someNewDag(t),
+			name:    "single vertex",
+			prepare: func(d *DAG) {
+				_, _ = d.AddVertex(idVertex{"0"})
+			},
+			want:    []string{"0"},
+		},
+		{
+			d: someNewDag(t),
+			name:    "one \"real\" root",
+			prepare: func(d *DAG) {
+				_, _ = d.AddVertex(idVertex{"0"})
+				_, _ = d.AddVertex(idVertex{"1"})
+				_ = d.AddEdge("0", "1")
+			},
+			want:    []string{"0"},
+		},
+		{
+			d: someNewDag(t),
+			name:    "10 leaves",
+			prepare: func(d *DAG) {
+				_, _ = d.AddVertex(idVertex{"0"})
+				_, _ = d.AddVertex(idVertex{"1"})
+				_ = d.AddEdge("0", "1")
+				for i := 2; i < 10; i++ {
+					srcKey := strconv.Itoa(i)
+					_, _ = d.AddVertex(idVertex{srcKey})
+					_ = d.AddEdge(srcKey, "1")
+				}
+			},
+			want:    []string{"0", "2", "3", "4", "5", "6", "7", "8", "9"},
+		},
 	}
-	for errWalk := range chanErrors {
-		t.Error(errWalk)
-	}
-	want := []string{"0"}
-	if deep.Equal(collect, want) != nil {
-		t.Errorf("GetRoots() = %v, want %v", collect, want)
-	}
-
-	// one "real" root
-	_, _ = d.AddVertex(idVertex{"1"})
-	_ = d.AddEdge("0", "1")
-	chanKeys1, chanErrors1, chanSignal1 := d.GetRoots()
-	defer close(chanSignal1)
-	var collect1 []string
-	for key := range chanKeys1 {
-		collect1 = append(collect1, key)
-	}
-	for errWalk := range chanErrors1 {
-		t.Error(errWalk)
-	}
-	want1 := []string{"0"}
-	if deep.Equal(collect1, want1) != nil {
-		t.Errorf("GetRoots() = %v, want %v", collect1, want1)
-	}
-
-	// 9 roots
-	for i := 2; i < 10; i++ {
-		srcKey := strconv.Itoa(i)
-		_, _ = d.AddVertex(idVertex{srcKey})
-		_ = d.AddEdge(srcKey, "1")
-	}
-	chanKeys2, chanErrors2, chanSignal2 := d.GetRoots()
-	defer close(chanSignal2)
-	var collect2 []string
-	for key := range chanKeys2 {
-		collect2 = append(collect2, key)
-	}
-	for errWalk := range chanErrors2 {
-		t.Error(errWalk)
-	}
-	want2 := []string{"0", "2", "3", "4", "5", "6", "7", "8", "9"}
-	if deep.Equal(collect2, want2) != nil {
-		t.Errorf("GetRoots() = %v, want %v", collect2, want2)
-	}
-
-	// signal ~4/9 roots
-	chanKeys3, chanErrors3, chanSignal3 := d.GetRoots()
-	defer close(chanSignal3)
-	var collect3 []string
-	for key := range chanKeys3 {
-		collect3 = append(collect3, key)
-		if key == "4" {
-			chanSignal3 <- true
-			break
-		}
-	}
-	for errWalk := range chanErrors3 {
-		t.Error(errWalk)
-	}
-	want3 := []string{"0", "2", "3", "4"}
-	if deep.Equal(collect3, want3) != nil {
-		t.Errorf("GetRoots() = %v, want %v", collect3, want3)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.prepare(tt.d)
+			cursor, err := tt.d.GetRoots()
+			got := collector(t, cursor, err)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
 func TestDAG_AddEdge(t *testing.T) {
-	d := someNewDag(t)
-	k1, _ := d.AddVertex(idVertex{"0"})
-	k2, _ := d.AddVertex(idVertex{"1"})
-
-	// adding edge
-	errAddEdge := d.AddEdge(k1, k2)
-	if errAddEdge != nil {
-		t.Errorf("AddEdge() failed: %v", errAddEdge)
+	tests := []struct {
+		d *DAG
+		name  string
+		prepare func(d *DAG)
+		want  error
+		srcKey string
+		dstKey string
+	}{
+		{
+			d:       someNewDag(t),
+			name:    "happy path",
+			prepare: func(d *DAG) {
+				_, _ = d.AddVertex(idVertex{"0"})
+				_, _ = d.AddVertex(idVertex{"1"})
+			},
+			want:    nil,
+			srcKey: "0",
+			dstKey: "1",
+		},
+		{
+			d:       someNewDag(t),
+			name:    "unknown Vertex",
+			prepare: func(d *DAG) {
+				_, _ = d.AddVertex(idVertex{"0"})
+				_, _ = d.AddVertex(idVertex{"1"})
+			},
+			want:    driver.ArangoError{
+				HasError:     true,
+				Code:         404,
+				ErrorNum:     1202,
+				ErrorMessage: "document not found",
+			},
+			srcKey: "0",
+			dstKey: "2",
+		},
+		{
+			d:       someNewDag(t),
+			name:    "duplicate edge",
+			prepare: func(d *DAG) {
+				_, _ = d.AddVertex(idVertex{"0"})
+				_, _ = d.AddVertex(idVertex{"1"})
+				err := d.AddEdge("0", "1")
+				if err != nil {
+					t.Fatal(err)
+				}
+			},
+			want:    errors.New("duplicate edge"),
+			srcKey: "0",
+			dstKey: "1",
+		},
+		{
+			d:       someNewDag(t),
+			name:    "loop",
+			prepare: func(d *DAG) {
+				_, _ = d.AddVertex(idVertex{"0"})
+				_, _ = d.AddVertex(idVertex{"1"})
+				err := d.AddEdge("0", "1")
+				if err != nil {
+					t.Fatal(err)
+				}
+			},
+			want:    errors.New("loop"),
+			srcKey: "1",
+			dstKey: "0",
+		},
 	}
-
-	// after adding edge
-	isEdge, errIsEdge := d.EdgeExists(k1, k2)
-	if errIsEdge != nil {
-		t.Error(errIsEdge)
-	}
-	if !isEdge {
-		t.Errorf("EdgeExists() = %t, want %t", isEdge, true)
-	}
-	size, errSize := d.GetSize()
-	if errSize != nil {
-		t.Error(errSize)
-	}
-	if size != 1 {
-		t.Errorf("GetSize() = %d, want 1", size)
-	}
-
-	// adding duplicate
-	errAddEdgeDuplicate := d.AddEdge(k1, k2)
-	if errAddEdgeDuplicate == nil {
-		t.Errorf("AddEdge() succeeded, want error")
-	}
-
-	// adding edge for unknown vertex
-	errAddEdgeUnknown := d.AddEdge(k1, "3")
-	if errAddEdgeUnknown == nil {
-		t.Errorf("AddEdge() succeeded, want error")
-	}
-
-	// loop
-	errAddEdgeLoop := d.AddEdge(k2, k1)
-	if errAddEdgeLoop == nil {
-		t.Errorf("AddEdge() succeeded, want error")
-	}
-
-	// loop self
-	errAddEdgeLoopSelf := d.AddEdge(k2, k2)
-	if errAddEdgeLoopSelf == nil {
-		t.Errorf("AddEdge() succeeded, want error")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.prepare(tt.d)
+			got := tt.d.AddEdge(tt.srcKey, tt.dstKey)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
@@ -407,298 +445,267 @@ func TestDAG_EdgeExists(t *testing.T) {
 
 func TestDAG_GetSize(t *testing.T) {
 	d := someNewDag(t)
-	size, err := d.GetSize()
+	got, err := d.GetSize()
 	if err != nil {
-		t.Errorf("failed to GetSize(): %v", err)
+		t.Error(err)
 	}
-	if size != 0 {
-		t.Errorf("GetSize() = %d, want %d", size, 0)
+	if got != 0 {
+		t.Errorf("got %d, want %d", got, 0)
 	}
 
 	for i := 1; i <= 9; i++ {
 		id1, _ := d.AddVertex(idVertex{strconv.Itoa(i * 10)})
 		id2, _ := d.AddVertex(idVertex{strconv.Itoa(i*10 + 1)})
 		_ = d.AddEdge(id1, id2)
-		size, err := d.GetSize()
+		got, err = d.GetSize()
 		if err != nil {
-			t.Errorf("failed to GetSize(): %v", err)
+			t.Error(err)
 		}
-		if int(size) != i {
-			t.Errorf("GetSize() = %d, want %d", size, 1)
+		if int(got) != i {
+			t.Errorf("got %d, want %d", got, 1)
 		}
 	}
 }
 
+
 func TestDAG_GetShortestPath(t *testing.T) {
-	d := someNewDag(t)
-	_, _ = d.AddVertex(idVertex{"0"})
-	_, _ = d.AddVertex(idVertex{"1"})
-	_, _ = d.AddVertex(idVertex{"2"})
-	_, _ = d.AddVertex(idVertex{"3"})
-	_, _ = d.AddVertex(idVertex{"4"})
-	_ = d.AddEdge("0", "1")
-	_ = d.AddEdge("1", "2")
-	_ = d.AddEdge("2", "3")
-	_ = d.AddEdge("3", "4")
-
-	// path exists
-	chanKeys, chanErrors, chanSignal, errorGSP := d.GetShortestPath("0", "4")
-	if errorGSP != nil {
-		t.Error(errorGSP)
+	d := standardDAG(t)
+	tests := []struct {
+		name  string
+		want  []string
+		srcKey string
+		dstKey string
+	}{
+		{
+			name: "happy path",
+			want:   []string{"2", "3", "4"},
+			srcKey: "2",
+			dstKey: "4",
+		},
+		{
+			name: "path doesn't exist",
+			want:   nil,
+			srcKey: "0",
+			dstKey: "5",
+		},
+		{
+			name: "shortest path",
+			want:   []string{"1", "4"},
+			srcKey: "1",
+			dstKey: "4",
+		},
+		{
+			name: "two shortest paths, pick BFS",
+			want:   []string{"0", "1", "4"},
+			srcKey: "0",
+			dstKey: "4",
+		},
 	}
-	defer close(chanSignal)
-	var collect []string
-	for key := range chanKeys {
-		collect = append(collect, key)
-	}
-	for errWalk := range chanErrors {
-		t.Error(errWalk)
-	}
-	want := []string{"0", "1", "2", "3", "4"}
-	if deep.Equal(collect, want) != nil {
-		t.Errorf("GetShortestPath() = %v, want %v", collect, want)
-	}
-
-	// path doesn't exist
-	_, _ = d.AddVertex(idVertex{"5"})
-	chanKeys1, chanErrors1, chanSignal1, errorGSP1 := d.GetShortestPath("0", "5")
-	if errorGSP1 != nil {
-		t.Error(errorGSP1)
-	}
-	defer close(chanSignal1)
-	var collect1 []string
-	for key := range chanKeys1 {
-		collect1 = append(collect1, key)
-	}
-	for errWalk := range chanErrors1 {
-		t.Error(errWalk)
-	}
-	var want1 []string
-	if deep.Equal(collect1, want1) != nil {
-		t.Errorf("GetShortestPath() = %v, want %v", collect1, want1)
-	}
-
-	// alternate path
-	_ = d.AddEdge("0", "3")
-	chanKeys2, _, _, _ := d.GetShortestPath("0", "4")
-	var collect2 []string
-	for key := range chanKeys2 {
-		collect2 = append(collect2, key)
-	}
-	want2 := []string{"0", "3", "4"}
-	if deep.Equal(collect2, want2) != nil {
-		t.Errorf("GetShortestPath() = %v, want %v", collect2, want2)
-	}
-
-	// 2 shortest paths pick the BFS first one
-	_ = d.AddEdge("1", "4")
-	chanKeys3, _, _, _ := d.GetShortestPath("0", "4")
-	var collect3 []string
-	for key := range chanKeys3 {
-		collect3 = append(collect3, key)
-	}
-	want3 := []string{"0", "1", "4"}
-	if deep.Equal(collect3, want3) != nil {
-		t.Errorf("GetShortestPath() = %v, want %v", collect3, want3)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cursor, err :=d.GetShortestPath(tt.srcKey, tt.dstKey)
+			got := collector(t, cursor, err)
+			if err != nil {
+				t.Error(err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
 func TestDAG_GetParents(t *testing.T) {
-	d := someNewDag(t)
-	_, _ = d.AddVertex(idVertex{"0"})
+	d := standardDAG(t)
+	tests := []struct {
+		name  string
+		want  []string
+		srcKey string
+	}{
+		{
+			name: "no parents",
+			want:   nil,
+			srcKey: "0",
+		},
+		{
+			name: "one parent",
+			want:   []string{"1"},
+			srcKey: "2",
+		},
+		{
+			name: "two parents",
+			want:   []string{"0", "2"},
+			srcKey: "3",
+		},
 
-	// simple chain BFS
-	chanKeys, chanErrors, chanSignal, errorGP := d.GetParents("0")
-	if errorGP != nil {
-		t.Error(errorGP)
 	}
-	defer close(chanSignal)
-	var collect []string
-	for key := range chanKeys {
-		collect = append(collect, key)
-	}
-	for errWalk := range chanErrors {
-		t.Error(errWalk)
-	}
-	var want []string
-	if deep.Equal(collect, want) != nil {
-		t.Errorf("GetParents() = %v, want %v", collect, want)
-	}
-
-	// n parents
-	_, _ = d.AddVertex(idVertex{"1"})
-	_, _ = d.AddVertex(idVertex{"2"})
-	_, _ = d.AddVertex(idVertex{"3"})
-	_, _ = d.AddVertex(idVertex{"4"})
-	_ = d.AddEdge("1", "0")
-	_ = d.AddEdge("2", "0")
-	_ = d.AddEdge("3", "0")
-	_ = d.AddEdge("4", "0")
-	chanKeys1, _, chanSignal1, _ := d.GetParents("0")
-	defer close(chanSignal1)
-	collect1 := make(map[string]interface{})
-	for key := range chanKeys1 {
-		collect1[key] = struct{}{}
-	}
-	want1 := map[string]interface{}{
-		"4": struct {}{},
-		"3": struct {}{},
-		"2": struct {}{},
-		"1": struct {}{},
-	}
-	if deep.Equal(collect1, want1) != nil {
-		t.Errorf("GetParents() = %v, want %v", collect1, want1)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cursor, err :=d.GetParents(tt.srcKey)
+			got := collector(t, cursor, err)
+			if err != nil {
+				t.Error(err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
 func TestDAG_GetAncestors(t *testing.T) {
-	d := someNewDag(t)
-	_, _ = d.AddVertex(idVertex{"0"})
-	_, _ = d.AddVertex(idVertex{"1"})
-	_, _ = d.AddVertex(idVertex{"2"})
-	_, _ = d.AddVertex(idVertex{"3"})
-	_, _ = d.AddVertex(idVertex{"4"})
-	_ = d.AddEdge("0", "1")
-	_ = d.AddEdge("1", "2")
-	_ = d.AddEdge("2", "3")
-	_ = d.AddEdge("3", "4")
+	d := standardDAG(t)
+	tests := []struct {
+		name  string
+		want  []string
+		srcKey string
+		dfs bool
+	}{
+		{
+			name: "no ancestors",
+			want:   nil,
+			srcKey: "0",
+			dfs: false,
+		},
+		{
+			name: "one ancestors",
+			want:   []string{"0"},
+			srcKey: "1",
+			dfs: false,
+		},
+		{
+			name: "simple chain",
+			want:   []string{"1", "0"},
+			srcKey: "2",
+			dfs: false,
+		},
+		{
+			name: "several parents",
+			want:   []string{"0", "2", "1"},
+			srcKey: "3",
+			dfs: false,
+		},
+		{
+			name: "several parents BFS",
+			want:   []string{"3","1", "0", "2"},
+			srcKey: "4",
+			dfs: false,
+		},
+		{
+			name: "several parents DFS",
+			want:   []string{"1","0", "3", "2"},
+			srcKey: "4",
+			dfs: true,
+		},
 
-	// simple chain BFS
-	chanKeys, chanErrors, chanSignal, errorGA := d.GetAncestors("4", false)
-	if errorGA != nil {
-		t.Error(errorGA)
 	}
-	defer close(chanSignal)
-	var collect []string
-	for key := range chanKeys {
-		collect = append(collect, key)
-	}
-	for errWalk := range chanErrors {
-		t.Error(errWalk)
-	}
-	want := []string{"3", "2", "1", "0"}
-	if deep.Equal(collect, want) != nil {
-		t.Errorf("GetAncestors() = %v, want %v", collect, want)
-	}
-
-	// two parents BFS
-	_, _ = d.AddVertex(idVertex{"0a"})
-	_ = d.AddEdge("0a", "1")
-	chanKeys1, _, chanSignal1, _ := d.GetAncestors("4", false)
-	defer close(chanSignal1)
-	var collect1 []string
-	for key := range chanKeys1 {
-		collect1 = append(collect1, key)
-	}
-	want1 := []string{"3", "2", "1", "0a", "0"}
-	if deep.Equal(collect1, want1) != nil {
-		t.Errorf("GetAncestors() = %v, want %v", collect1, want1)
-	}
-
-	// rhombus BFS
-	_, _ = d.AddVertex(idVertex{"2a"})
-	_ = d.AddEdge("1", "2a")
-	_ = d.AddEdge("2a", "3")
-	chanKeys2, _, chanSignal2, _ := d.GetAncestors("4", false)
-	defer close(chanSignal2)
-	var collect2 []string
-	for key := range chanKeys2 {
-		collect2 = append(collect2, key)
-	}
-	want2 := []string{"3", "2a", "2", "1", "0a", "0"}
-	if deep.Equal(collect2, want2) != nil {
-		t.Errorf("GetAncestors() = %v, want %v", collect2, want2)
-	}
-
-	// rhombus DFS
-	chanKeys3, _, chanSignal3, _ := d.GetAncestors("4", true)
-	defer close(chanSignal3)
-	var collect3 []string
-	for key := range chanKeys3 {
-		collect3 = append(collect3, key)
-	}
-	want3 := []string{"3", "2", "1", "0", "0a", "2a"}
-	if deep.Equal(collect3, want3) != nil {
-		t.Errorf("GetAncestors() = %v, want %v", collect3, want3)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cursor, err :=d.GetAncestors(tt.srcKey, tt.dfs)
+			got := collector(t, cursor, err)
+			if err != nil {
+				t.Error(err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
 func TestDAG_GetDescendants(t *testing.T) {
+	d := standardDAG(t)
+	tests := []struct {
+		name  string
+		want  []string
+		srcKey string
+		dfs bool
+	}{
+		{
+			name: "no descendants",
+			want:   nil,
+			srcKey: "4",
+			dfs: false,
+		},
+		{
+			name: "one descendant",
+			want:   []string{"4"},
+			srcKey: "3",
+			dfs: false,
+		},
+		{
+			name: "simple chain",
+			want:   []string{"3", "4"},
+			srcKey: "2",
+			dfs: false,
+		},
+		{
+			name: "several descendants",
+			want:   []string{"4", "2", "3"},
+			srcKey: "1",
+			dfs: false,
+		},
+		{
+			name: "several descendants BFS",
+			want:   []string{"3","1", "2", "4"},
+			srcKey: "0",
+			dfs: false,
+		},
+		{
+			name: "several descendants DFS",
+			want:   []string{"1","2", "3", "4"},
+			srcKey: "0",
+			dfs: true,
+		},
+
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cursor, err :=d.GetDescendants(tt.srcKey, tt.dfs)
+			got := collector(t, cursor, err)
+			if err != nil {
+				t.Error(err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func standardDAG(t *testing.T) *DAG {
+
+	/*
+	     0   5
+	    /|
+	   | 1
+	   | |\
+	   | 2 |
+	    \| |
+	     3 |
+	     |/
+	     4
+	*/
+
 	d := someNewDag(t)
 	_, _ = d.AddVertex(idVertex{"0"})
 	_, _ = d.AddVertex(idVertex{"1"})
 	_, _ = d.AddVertex(idVertex{"2"})
 	_, _ = d.AddVertex(idVertex{"3"})
 	_, _ = d.AddVertex(idVertex{"4"})
+	_, _ = d.AddVertex(idVertex{"5"})
 	_ = d.AddEdge("0", "1")
 	_ = d.AddEdge("1", "2")
+	_ = d.AddEdge("1", "4")
 	_ = d.AddEdge("2", "3")
 	_ = d.AddEdge("3", "4")
-
-	// simple chain BFS
-	chanKeys, chanErrors, chanSignal, errorGA := d.GetDescendants("0", false)
-	if errorGA != nil {
-		t.Error(errorGA)
-	}
-	defer close(chanSignal)
-	var collect []string
-	for key := range chanKeys {
-		collect = append(collect, key)
-	}
-	for errWalk := range chanErrors {
-		t.Error(errWalk)
-	}
-	want := []string{"1", "2", "3", "4"}
-	if deep.Equal(collect, want) != nil {
-		t.Errorf("GetDescendants() = %v, want %v", collect, want)
-	}
-
-	// two parents BFS
-	_, _ = d.AddVertex(idVertex{"4a"})
-	_ = d.AddEdge("3", "4a")
-	chanKeys1, _, chanSignal1, _ := d.GetDescendants("0", false)
-	defer close(chanSignal1)
-	var collect1 []string
-	for key := range chanKeys1 {
-		collect1 = append(collect1, key)
-	}
-	want1 := []string{"1", "2", "3", "4a", "4"}
-	if deep.Equal(collect1, want1) != nil {
-		t.Errorf("GetDescendants() = %v, want %v", collect1, want1)
-	}
-
-	// rhombus BFS
-	_, _ = d.AddVertex(idVertex{"2a"})
-	_ = d.AddEdge("1", "2a")
-	_ = d.AddEdge("2a", "3")
-	chanKeys2, _, chanSignal2, _ := d.GetDescendants("0", false)
-	defer close(chanSignal2)
-	var collect2 []string
-	for key := range chanKeys2 {
-		collect2 = append(collect2, key)
-	}
-	want2 := []string{"1", "2a", "2", "3", "4a", "4"}
-	if deep.Equal(collect2, want2) != nil {
-		t.Errorf("GetDescendants() = %v, want %v", collect2, want2)
-	}
-
-	// rhombus DFS
-	chanKeys3, _, chanSignal3, _ := d.GetDescendants("0", true)
-	defer close(chanSignal3)
-	var collect3 []string
-	for key := range chanKeys3 {
-		collect3 = append(collect3, key)
-	}
-	want3 := []string{"1", "2", "3", "4", "4a", "2a"}
-	if deep.Equal(collect3, want3) != nil {
-		t.Errorf("GetDescendants() = %v, want %v", collect3, want3)
-	}
+	_ = d.AddEdge("0", "3")
+	return d
 }
-
 
 func someNewDag(t *testing.T) *DAG {
 
-	// get arangdb host and port from environment
+	// get arangoDB host and port from environment
 	host := os.Getenv("ARANGODB_HOST")
 	if host == "" {
 		host = "localhost"
@@ -743,594 +750,3 @@ func someName() string {
 type idVertex struct {
 	Key string `json:"_key"`
 }
-
-/*
-func DeleteVertexTest(d DAG, t *testing.T) {
-
-	k1, _ := d.AddVertex(1)
-
-	// delete a single vertex and inspect the graph
-	_ = d.DeleteVertex(k1)
-	if order, _ := d.GetOrder(); order != 0 {
-		t.Errorf("GetOrder() = %d, want 0", order)
-	}
-	if size, _ := d.GetSize(); size != 0 {
-		t.Errorf("GetSize() = %d, want 0", size)
-	}
-	if leaves, _ := d.GetLeaves(); len(leaves) != 0 {
-		t.Errorf("GetLeaves() = %d, want 0", len(leaves))
-	}
-	if roots, _ := d.GetRoots(); len(roots) != 0 {
-		t.Errorf("GetLeaves() = %d, want 0", len(roots))
-	}
-	if vertices, _ := d.GetVertices(); len(vertices) != 0 {
-		t.Errorf("GetVertices() = %d, want 0", len(vertices))
-	}
-
-	k1, _ = d.AddVertex(1)
-	k2, _ := d.AddVertex(2)
-	k3, _ := d.AddVertex(3)
-	_ = d.AddEdge(k1, k2)
-	_ = d.AddEdge(k2, k3)
-	if order, _ := d.GetOrder(); order != 3 {
-		t.Errorf("GetOrder() = %d, want 3", order)
-	}
-	if size, _ := d.GetSize(); size != 2 {
-		t.Errorf("GetSize() = %d, want 2", size)
-	}
-	if leaves, _ := d.GetLeaves(); len(leaves) != 1 {
-		t.Errorf("GetLeaves() = %d, want 1", len(leaves))
-	}
-	if roots, _ := d.GetRoots(); len(roots) != 1 {
-		t.Errorf("GetLeaves() = %d, want 1", len(roots))
-	}
-	if vertices, _ := d.GetVertices(); len(vertices) != 3 {
-		t.Errorf("GetVertices() = %d, want 3", len(vertices))
-	}
-	if vertices, _ := d.GetDescendants(k1); len(vertices) != 2 {
-		t.Errorf("GetDescendants(v1) = %d, want 2", len(vertices))
-	}
-	if vertices, _ := d.GetAncestors(k3); len(vertices) != 2 {
-		t.Errorf("GetAncestors(v3) = %d, want 2", len(vertices))
-	}
-
-	_ = d.DeleteVertex(k2)
-	if order, _ := d.GetOrder(); order != 2 {
-		t.Errorf("GetOrder() = %d, want 2", order)
-	}
-	if size, _ := d.GetSize(); size != 0 {
-		t.Errorf("GetSize() = %d, want 0", size)
-	}
-	if leaves, _ := d.GetLeaves(); len(leaves) != 2 {
-		t.Errorf("GetLeaves() = %d, want 2", len(leaves))
-	}
-	if roots, _ := d.GetRoots(); len(roots) != 2 {
-		t.Errorf("GetLeaves() = %d, want 2", len(roots))
-	}
-	if vertices, _ := d.GetVertices(); len(vertices) != 2 {
-		t.Errorf("GetVertices() = %d, want 2", len(vertices))
-	}
-	if vertices, _ := d.GetDescendants(k1); len(vertices) != 0 {
-		t.Errorf("GetDescendants(v1) = %d, want 0", len(vertices))
-	}
-	if vertices, _ := d.GetAncestors(k3); len(vertices) != 0 {
-		t.Errorf("GetAncestors(v3) = %d, want 0", len(vertices))
-	}
-
-	// unknown
-	errUnknown := d.DeleteVertex("foo")
-	if ! IsUnknownIDError(errUnknown) {
-		t.Errorf("DeleteVertex(\"foo\") = '%v', want unknown key error", errUnknown)
-	}
-
-	// empty
-	errEmpty := d.DeleteVertex("")
-	if ! IsEmptyIDError(errEmpty) {
-		t.Errorf("DeleteVertex(\"\") = '%v', want empty key error", errEmpty)
-	}
-}
-
-func AddEdgeTest(d DAG, t *testing.T) {
-	k0, _ := d.AddVertex(0)
-	k1, _ := d.AddVertex(1)
-	k2, _ := d.AddVertex(2)
-	k3, _ := d.AddVertex(3)
-
-	// add a single edge and inspect the graph
-	_ = d.AddEdge(k1, k2)
-	if children, _ := d.GetChildren(k1); len(children) != 1 {
-		t.Errorf("GetChildren(k1) = %d, want 1", len(children))
-	}
-	if parents, _ := d.GetParents(k2); len(parents) != 1 {
-		t.Errorf("GetParents(k2) = %d, want 1", len(parents))
-	}
-	if leaves, _ := d.GetLeaves(); len(leaves) != 3 {
-		t.Errorf("GetLeaves() = %d, want 3", len(leaves))
-	}
-	if roots, _ := d.GetRoots(); len(roots) != 3 {
-		t.Errorf("GetRoots() = %d, want 3", len(roots))
-	}
-	if vertices, _ := d.GetDescendants(k1); len(vertices) != 1 {
-		t.Errorf("GetDescendants(k1) = %d, want 1", len(vertices))
-	}
-	if vertices, _ := d.GetAncestors(k2); len(vertices) != 1 {
-		t.Errorf("GetAncestors(k2) = %d, want 1", len(vertices))
-	}
-
-	err := d.AddEdge(k2, k3)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if vertices, _ := d.GetDescendants(k1); len(vertices) != 2 {
-		t.Errorf("GetDescendants(k1) = %d, want 2", len(vertices))
-	}
-	if vertices, _ := d.GetAncestors(k3); len(vertices) != 2 {
-		t.Errorf("GetAncestors(k3) = %d, want 2", len(vertices))
-	}
-
-	_ = d.AddEdge(k0, k1)
-	if vertices, _ := d.GetDescendants(k0); len(vertices) != 3 {
-		t.Errorf("GetDescendants(k0) = %d, want 3", len(vertices))
-	}
-	if vertices, _ := d.GetAncestors(k3); len(vertices) != 3 {
-		t.Errorf("GetAncestors(k3) = %d, want 3", len(vertices))
-	}
-
-	// loop
-	errLoopSrcSrc := d.AddEdge(k1, k1)
-	if ! IsSrcDstEqualError(errLoopSrcSrc) {
-		t.Errorf("AddEdge(k1, k1) = '%v', want loop error", errLoopSrcSrc)
-	}
-
-	errLoopDstSrc := d.AddEdge(k2, k1)
-	if ! IsLoopError(errLoopDstSrc) {
-		t.Errorf("AddEdge(k2, k1) = '%v', want loop error", errLoopDstSrc)
-	}
-
-	// duplicate
-	errDuplicate := d.AddEdge(k1, k2)
-	if ! IsDuplicateEdgeError(errDuplicate) {
-		t.Errorf("AddEdge(k1, k2) = '%v', want duplicate edge error", errDuplicate)
-	}
-
-	// empty
-	errEmptySrc := d.AddEdge("", k2)
-	if ! IsEmptyIDError(errEmptySrc) {
-		t.Errorf("AddEdge(\"\", k2) = '%v', want empty key error", errEmptySrc)
-	}
-	errEmptyDst := d.AddEdge(k1, "")
-	if ! IsEmptyIDError(errEmptyDst) {
-		t.Errorf("AddEdge(k1, \"\") = '%v', want empty key error", errEmptyDst)
-	}
-}
-
-func DeleteEdgeTest(d DAG, t *testing.T) {
-
-	k0, _ := d.AddVertex(0)
-	k1, _ := d.AddVertex(1)
-	_ = d.AddEdge(k0, k1)
-	if size, _ := d.GetSize(); size != 1 {
-		t.Errorf("GetSize() = %d, want 1", size)
-	}
-	_ = d.DeleteEdge(k0, k1)
-	if size, _ := d.GetSize(); size != 0 {
-		t.Errorf("GetSize() = %d, want 0", size)
-	}
-
-	// unknown
-	errUnknown := d.DeleteEdge(k0, k1)
-	if ! IsUnknownEdgeError(errUnknown) {
-		t.Errorf("DeleteEdge(k0, k1) = '%v', want unknown edge error", errUnknown)
-	}
-
-	// empty
-	errEmptySrc := d.DeleteEdge("", k1)
-	if ! IsEmptyIDError(errEmptySrc) {
-		t.Errorf("DeleteEdge(\"\", k1) = '%v', want empty key error", errEmptySrc)
-	}
-	errEmptyDst := d.DeleteEdge(k0, "")
-	if ! IsEmptyIDError(errEmptyDst) {
-		t.Errorf("DeleteEdge(k0, \"\") = '%v', want empty key error", errEmptyDst)
-	}
-
-	// unknown
-
-	// unknown
-	errUnknownSrc := d.DeleteEdge("foo", k1)
-	if ! IsUnknownIDError(errUnknownSrc) {
-		t.Errorf("DeleteEdge(\"foo\", k1) = '%v', want unknown key error", errUnknownSrc)
-	}
-
-	errUnknownDst := d.DeleteEdge(k0, "foo")
-	if ! IsUnknownIDError(errUnknownDst) {
-		t.Errorf("DeleteEdge(k0, \"foo\") = '%v', want unknown key error", errUnknownDst)
-	}
-}
-
-func GetChildrenTest(d DAG, t *testing.T) {
-
-	k1, _ := d.AddVertex(1)
-	k2, _ := d.AddVertex(2)
-	k3, _ := d.AddVertex(3)
-
-	_ = d.AddEdge(k1, k2)
-	_ = d.AddEdge(k1, k3)
-
-	children, _ := d.GetChildren(k1)
-	if length := len(children); length != 2 {
-		t.Errorf("GetChildren() = %d, want 2", length)
-	}
-	if _, exists := children[k2]; !exists {
-		t.Error("GetChildren()[k2] = false, want true")
-	}
-	if _, exists := children[k3]; !exists {
-		t.Error("GetChildren()[k3] = false, want true")
-	}
-
-	// unknown
-	_, errUnknown := d.GetChildren("foo")
-	if ! IsUnknownIDError(errUnknown) {
-		t.Errorf("GetChildren(\"foo\") = '%v', want unknown key error", errUnknown)
-	}
-
-	// empty
-	_, errEmpty := d.GetChildren("")
-	if ! IsEmptyIDError(errEmpty) {
-		t.Errorf("GetChildren(\"\") = '%v', want empty key error", errEmpty)
-	}
-
-
-}
-
-func GetParentsTest(d DAG, t *testing.T) {
-
-	k1, _ := d.AddVertex(1)
-	k2, _ := d.AddVertex(2)
-	k3, _ := d.AddVertex(3)
-
-	_ = d.AddEdge(k1, k3)
-	_ = d.AddEdge(k2, k3)
-
-	parents, _ := d.GetParents(k3)
-	if length := len(parents); length != 2 {
-		t.Errorf("GetParents(k3) = %d, want 2", length)
-	}
-	if _, exists := parents[k1]; !exists {
-		t.Errorf("GetParents(k3)[k1] = %t, want true", exists)
-	}
-	if _, exists := parents[k2]; !exists {
-		t.Errorf("GetParents(k3)[k2] = %t, want true", exists)
-	}
-
-	// unknown
-	_, errUnknown := d.GetParents("foo")
-	if ! IsUnknownIDError(errUnknown) {
-		t.Errorf("GetParents(\"foo\") = '%v', want unknown key error", errUnknown)
-	}
-
-	// empty
-	_, errEmpty := d.GetParents("")
-	if ! IsEmptyIDError(errEmpty) {
-		t.Errorf("GetParents(\"\") = '%v', want empty key error", errEmpty)
-	}
-
-}
-
-func GetDescendantsTest(d DAG, t *testing.T) {
-
-	k1, _ := d.AddVertex(1)
-	k2, _ := d.AddVertex(2)
-	k3, _ := d.AddVertex(3)
-	k4, _ := d.AddVertex(4)
-
-	_ = d.AddEdge(k1, k2)
-	_ = d.AddEdge(k2, k3)
-	_ = d.AddEdge(k2, k4)
-
-	if desc, _ := d.GetDescendants(k1); len(desc) != 3 {
-		t.Errorf("GetDescendants(k1) = %d, want 3", len(desc))
-	}
-	if desc, _ := d.GetDescendants(k2); len(desc) != 2 {
-		t.Errorf("GetDescendants(k2) = %d, want 2", len(desc))
-	}
-	if desc, _ := d.GetDescendants(k3); len(desc) != 0 {
-		t.Errorf("GetDescendants(k4) = %d, want 0", len(desc))
-	}
-	if desc, _ := d.GetDescendants(k4); len(desc) != 0 {
-		t.Errorf("GetDescendants(k4) = %d, want 0", len(desc))
-	}
-
-	// unknown
-	_, errUnknown := d.GetDescendants("foo")
-	if ! IsUnknownIDError(errUnknown) {
-		t.Errorf("GetDescendants(\"foo\") = '%v', want unknown key error", errUnknown)
-	}
-
-	// empty
-	_, errEmpty := d.GetDescendants("")
-	if ! IsEmptyIDError(errEmpty) {
-		t.Errorf("GetDescendants(\"\") = '%v', want empty key error", errEmpty)
-	}
-}
-
-func GetOrderedDescendantsTest(d DAG, t *testing.T) {
-
-	k1, _ := d.AddVertex(1)
-	k2, _ := d.AddVertex(2)
-	k3, _ := d.AddVertex(3)
-	k4, _ := d.AddVertex(4)
-
-	_ = d.AddEdge(k1, k2)
-	_ = d.AddEdge(k2, k3)
-	_ = d.AddEdge(k2, k4)
-
-	if desc, _ := d.GetOrderedDescendants(k1); len(desc) != 3 {
-		t.Errorf("GetOrderedDescendants(k1) = %d, want 3", len(desc))
-	}
-	if desc, _ := d.GetOrderedDescendants(k2); len(desc) != 2 {
-		t.Errorf("GetOrderedDescendants(k2) = %d, want 2", len(desc))
-	}
-	if desc, _ := d.GetOrderedDescendants(k3); len(desc) != 0 {
-		t.Errorf("GetOrderedDescendants(k4) = %d, want 0", len(desc))
-	}
-	if desc, _ := d.GetOrderedDescendants(k4); len(desc) != 0 {
-		t.Errorf("GetOrderedDescendants(k4) = %d, want 0", len(desc))
-	}
-	if desc, _ := d.GetOrderedDescendants(k1); !equal(desc, []string{k2, k3, k4}) && !equal(desc, []string{k2, k4, k3}) {
-		t.Errorf("GetOrderedDescendants(k4) = %v, want %v or %v", desc, []string{k2, k3, k4}, []string{k2, k4, k3})
-	}
-
-	// unknown
-	_, errUnknown := d.GetOrderedDescendants("foo")
-	if ! IsUnknownIDError(errUnknown) {
-		t.Errorf("GetOrderedDescendants(\"foo\") = '%v', want unknown key error", errUnknown)
-	}
-
-	// empty
-	_, errEmpty := d.GetOrderedDescendants("")
-	if ! IsEmptyIDError(errEmpty) {
-		t.Errorf("GetOrderedDescendants(\"\") = '%v', want empty key error", errEmpty)
-	}
-}
-
-func equal(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i, v := range a {
-		if v != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func GetAncestorsTest(d DAG, t *testing.T) {
-
-	k0, _ := d.AddVertex(0)
-	k1, _ := d.AddVertex(1)
-	k2, _ := d.AddVertex(2)
-	k3, _ := d.AddVertex(3)
-	k4, _ := d.AddVertex(4)
-	k5, _ := d.AddVertex(5)
-	k6, _ := d.AddVertex(6)
-	k7, _ := d.AddVertex(7)
-
-	_ = d.AddEdge(k1, k2)
-	_ = d.AddEdge(k2, k3)
-	_ = d.AddEdge(k2, k4)
-
-	if ancestors, _ := d.GetAncestors(k4); len(ancestors) != 2 {
-		t.Errorf("GetAncestors(k4) = %d, want 2", len(ancestors))
-	}
-	if ancestors, _ := d.GetAncestors(k3); len(ancestors) != 2 {
-		t.Errorf("GetAncestors(k3) = %d, want 2", len(ancestors))
-	}
-	if ancestors, _ := d.GetAncestors(k2); len(ancestors) != 1 {
-		t.Errorf("GetAncestors(k2) = %d, want 1", len(ancestors))
-	}
-	if ancestors, _ := d.GetAncestors(k1); len(ancestors) != 0 {
-		t.Errorf("GetAncestors(k1) = %d, want 0", len(ancestors))
-	}
-
-	_ = d.AddEdge(k3, k5)
-	_ = d.AddEdge(k4, k6)
-
-	if ancestors, _ := d.GetAncestors(k4); len(ancestors) != 2 {
-		t.Errorf("GetAncestors(k4) = %d, want 2", len(ancestors))
-	}
-	if ancestors, _ := d.GetAncestors(k7); len(ancestors) != 0 {
-		t.Errorf("GetAncestors(k4) = %d, want 7", len(ancestors))
-	}
-	_ = d.AddEdge(k5, k7)
-	if ancestors, _ := d.GetAncestors(k7); len(ancestors) != 4 {
-		t.Errorf("GetAncestors(k7) = %d, want 4", len(ancestors))
-	}
-	_ = d.AddEdge(k0, k1)
-	if ancestors, _ := d.GetAncestors(k7); len(ancestors) != 5 {
-		t.Errorf("GetAncestors(k7) = %d, want 5", len(ancestors))
-	}
-
-	// unknown
-	_, errUnknown := d.GetAncestors("foo")
-	if ! IsUnknownIDError(errUnknown) {
-		t.Errorf("GetAncestors(\"foo\") = '%v', want unknown key error", errUnknown)
-	}
-
-	// empty
-	_, errEmpty := d.GetAncestors("")
-	if ! IsEmptyIDError(errEmpty) {
-		t.Errorf("GetAncestors(\"\") = '%v', want empty key error", errEmpty)
-	}
-
-}
-
-func GetOrderedAncestorsTest(d DAG, t *testing.T) {
-
-	k1, _ := d.AddVertex(1)
-	k2, _ := d.AddVertex(2)
-	k3, _ := d.AddVertex(3)
-	k4, _ := d.AddVertex(4)
-
-	_ = d.AddEdge(k1, k2)
-	_ = d.AddEdge(k2, k3)
-	_ = d.AddEdge(k2, k4)
-
-	if desc, _ := d.GetOrderedAncestors(k4); len(desc) != 2 {
-		t.Errorf("GetOrderedAncestors(k4) = %d, want 2", len(desc))
-	}
-	if desc, _ := d.GetOrderedAncestors(k2); len(desc) != 1 {
-		t.Errorf("GetOrderedAncestors(k2) = %d, want 1", len(desc))
-	}
-	if desc, _ := d.GetOrderedAncestors(k1); len(desc) != 0 {
-		t.Errorf("GetOrderedAncestors(k1) = %d, want 0", len(desc))
-	}
-	if desc, _ := d.GetOrderedAncestors(k4); !equal(desc, []string{k2, k1}) {
-		t.Errorf("GetOrderedAncestors(k4) = %v, want %v", desc, []string{k2, k1})
-	}
-
-	// unknown
-	_, errUnknown := d.GetOrderedAncestors("foo")
-	if ! IsUnknownIDError(errUnknown) {
-		t.Errorf("GetOrderedAncestors(\"foo\") = '%v', want unknown key error", errUnknown)
-	}
-
-	// empty
-	_, errEmpty := d.GetOrderedAncestors("")
-	if ! IsEmptyIDError(errEmpty) {
-		t.Errorf("GetOrderedAncestors(\"\") = '%v', want empty key error", errEmpty)
-	}
-}
-
-func AncestorsWalkerTest(d DAG, t *testing.T) {
-
-	k1, _ := d.AddVertex(1)
-	k2, _ := d.AddVertex(2)
-	k3, _ := d.AddVertex(3)
-	k4, _ := d.AddVertex(4)
-	k5, _ := d.AddVertex(5)
-	k6, _ := d.AddVertex(6)
-	k7, _ := d.AddVertex(7)
-	k8, _ := d.AddVertex(8)
-	k9, _ := d.AddVertex(9)
-	k10, _ := d.AddVertex(10)
-
-	_ = d.AddEdge(k1, k2)
-	_ = d.AddEdge(k1, k3)
-	_ = d.AddEdge(k2, k4)
-	_ = d.AddEdge(k2, k5)
-	_ = d.AddEdge(k4, k6)
-	_ = d.AddEdge(k5, k6)
-	_ = d.AddEdge(k6, k7)
-	_ = d.AddEdge(k7, k8)
-	_ = d.AddEdge(k7, k9)
-	_ = d.AddEdge(k8, k10)
-	_ = d.AddEdge(k9, k10)
-
-	vertices, _, _ := d.AncestorsWalker(k10)
-	var ancestors []string
-	for v := range vertices {
-		ancestors = append(ancestors, v)
-	}
-	exp1 := []string{k9, k8, k7, k6, k4, k5, k2, k1}
-	exp2 := []string{k8, k9, k7, k6, k4, k5, k2, k1}
-	exp3 := []string{k9, k8, k7, k6, k5, k4, k2, k1}
-	exp4 := []string{k8, k9, k7, k6, k5, k4, k2, k1}
-	if !(equal(ancestors, exp1) || equal(ancestors, exp2) || equal(ancestors, exp3) || equal(ancestors, exp4)) {
-		t.Errorf("AncestorsWalker(k10) = %v, want %v, %v, %v, or %v ", ancestors, exp1, exp2, exp3, exp4)
-	}
-
-	// unknown
-	_, _, errUnknown := d.AncestorsWalker("foo")
-	if ! IsUnknownIDError(errUnknown) {
-		t.Errorf("AncestorsWalker(\"foo\") = '%v', want unknown key error", errUnknown)
-	}
-
-	// empty
-	_, _, errEmpty := d.AncestorsWalker("")
-	if ! IsEmptyIDError(errEmpty) {
-		t.Errorf("AncestorsWalker(\"\") = '%v', want empty key error", errEmpty)
-	}
-}
-
-func AncestorsWalkerSignalTest(d DAG, t *testing.T) {
-	k1, _ := d.AddVertex(1)
-	k2, _ := d.AddVertex(2)
-	k3, _ := d.AddVertex(3)
-	k4, _ := d.AddVertex(4)
-	k5, _ := d.AddVertex(5)
-
-	_ = d.AddEdge(k1, k2)
-	_ = d.AddEdge(k2, k3)
-	_ = d.AddEdge(k2, k4)
-	_ = d.AddEdge(k4, k5)
-
-	var ancestors []string
-	vertices, signal, _ := d.AncestorsWalker(k5)
-	for v := range vertices {
-		ancestors = append(ancestors, v)
-		if v == k2 {
-			signal <- true
-			break
-		}
-	}
-	if !equal(ancestors, []string{k4, k2}) {
-		t.Errorf("AncestorsWalker(k4) = %v, want %v", ancestors, []string{k4, k2})
-	}
-}
-
-func GetStringTest(d DAG, t *testing.T) {
-
-	k1, _ := d.AddVertex(1)
-	k2, _ := d.AddVertex(2)
-	k3, _ := d.AddVertex(3)
-	k4, _ := d.AddVertex(4)
-
-	_ = d.AddEdge(k1, k2)
-	_ = d.AddEdge(k2, k3)
-	_ = d.AddEdge(k2, k4)
-	expected := "DAG Vertices: 4 - Edges: 3"
-	s := d.String()
-	if s[:len(expected)] != expected {
-		t.Errorf("String() = \"%s\", want \"%s\"", s, expected)
-	}
-}
-
-func InterfaceTests(t *testing.T, newFn func() dag.DAG, tests []func(dag.DAG, *testing.T)) {
-
-	tests := []struct {
-		name string
-		fn   func(dag.DAG, *testing.T)
-	}{
-		{name: "NewDAG()", fn: newDAG},
-		{name: "AddVertex()", fn: addVertex},
-		{name: "GetVertex()", fn: getVertexId},
-		{name: "DeleteVertex()", fn: deleteVertex},
-		{name: "AddEdge()", fn: addEdge},
-		{name: "DeleteEdge()", fn: deleteEdge},
-		{name: "GetChildren()", fn: getChildren},
-		{name: "GetParents()", fn: getParents},
-		{name: "GetDescendants()", fn: getDescendants},
-		{name: "GetOrderedDescendants()", fn: getOrderedDescendants},
-		{name: "GetAncestors()", fn: getAncestors},
-		{name: "GetOrderedAncestors()", fn: getOrderedAncestors},
-		{name: "AncestorsWalker()", fn: ancestorsWalker},
-		{name: "AncestorsWalkerSignal()", fn: ancestorsWalkerSignal},
-		{name: "ReduceTransitively()", fn: reduceTransitively},
-		{name: "String()", fn: getString},
-	}
-
-
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			defer func() {
-				if err := recover(); err != nil {
-					log.Println("panic occurred:", err)
-				}
-			}()
-			test.fn(newFn(), t) })
-	}
-}
-
-*/

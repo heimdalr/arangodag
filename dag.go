@@ -24,10 +24,6 @@ type myEdge struct {
 	To   string `json:"_to"`
 }
 
-type myKey struct {
-	Key string `json:"_key,omitempty"`
-}
-
 // NewDAG creates / initializes a new DAG.
 func NewDAG(dbName, vertexCollName, edgeCollName string, client driver.Client) (*DAG, error) {
 
@@ -122,12 +118,13 @@ func (d *DAG) GetOrder() (uint64, error) {
 // querying may be received from the error-channel. And, finally, the
 // bool-channel may be used to prevent further DB-querying by sending true
 // into it.
-func (d *DAG) GetVertices() (<-chan string, <-chan error, chan<- bool) {
+func (d *DAG) GetVertices() (driver.Cursor, error) {
 	query := "FOR v IN @@vertexCollection RETURN v"
 	bindVars := map[string]interface{}{
 		"@vertexCollection": d.vertices.Name(),
 	}
-	return d.walker(query, bindVars)
+	ctx := context.Background()
+	return d.db.Query(ctx, query, bindVars)
 }
 
 // GetLeaves provides for retrieving the keys of (all) leaves of the DAG.
@@ -137,7 +134,7 @@ func (d *DAG) GetVertices() (<-chan string, <-chan error, chan<- bool) {
 // querying may be received from the error-channel. And, finally, the
 // bool-channel may be used to prevent further DB-querying by sending true
 // into it.
-func (d *DAG) GetLeaves() (<-chan string, <-chan error, chan<- bool) {
+func (d *DAG) GetLeaves() (driver.Cursor, error) {
 
 	query := "FOR v IN @@vertexCollection " +
 		"FILTER LENGTH(FOR vv IN 1..1 OUTBOUND v @@edgeCollection LIMIT 1 RETURN 1) == 0 " +
@@ -146,7 +143,8 @@ func (d *DAG) GetLeaves() (<-chan string, <-chan error, chan<- bool) {
 		"@vertexCollection": d.vertices.Name(),
 		"@edgeCollection":   d.edges.Name(),
 	}
-	return d.walker(query, bindVars)
+	ctx := context.Background()
+	return d.db.Query(ctx, query, bindVars)
 }
 
 // GetRoots provides for retrieving the keys of (all) roots of the DAG.
@@ -156,7 +154,7 @@ func (d *DAG) GetLeaves() (<-chan string, <-chan error, chan<- bool) {
 // querying may be received from the error-channel. And, finally, the
 // bool-channel may be used to prevent further DB-querying by sending true into
 // it.
-func (d *DAG) GetRoots() (<-chan string, <-chan error, chan<- bool) {
+func (d *DAG) GetRoots() (driver.Cursor, error) {
 	query := "FOR v IN @@vertexCollection " +
 		"FILTER LENGTH(FOR vv IN 1..1 INBOUND v @@edgeCollection LIMIT 1 RETURN 1) == 0 " +
 		"RETURN v"
@@ -164,7 +162,8 @@ func (d *DAG) GetRoots() (<-chan string, <-chan error, chan<- bool) {
 		"@vertexCollection": d.vertices.Name(),
 		"@edgeCollection":   d.edges.Name(),
 	}
-	return d.walker(query, bindVars)
+	ctx := context.Background()
+	return d.db.Query(ctx, query, bindVars)
 }
 
 // AddEdge adds an edge from the vertex with the key srcKey to the vertex with
@@ -245,14 +244,14 @@ func (d *DAG) GetSize() (uint64, error) {
 //
 // GetShortestPath "immediately" closes the string-channel, if there is
 // no such path.
-func (d *DAG) GetShortestPath(srcKey, dstKey string) (<-chan string, <-chan error, chan<- bool, error) {
+func (d *DAG) GetShortestPath(srcKey, dstKey string) (driver.Cursor, error) {
 	srcId, errSrc := d.getVertexId(srcKey)
 	if errSrc != nil {
-		return nil, nil, nil, errSrc
+		return nil, errSrc
 	}
 	dstId, errDst := d.getVertexId(dstKey)
 	if errDst != nil {
-		return nil, nil, nil, errDst
+		return nil, errDst
 	}
 	query := "FOR v IN OUTBOUND SHORTEST_PATH @from TO @to @@collection RETURN v"
 	bindVars := map[string]interface{}{
@@ -260,8 +259,8 @@ func (d *DAG) GetShortestPath(srcKey, dstKey string) (<-chan string, <-chan erro
 		"from":        srcId,
 		"to":          dstId,
 	}
-	chanKeys, chanErrors, chanSignal := d.walker(query, bindVars)
-	return chanKeys, chanErrors, chanSignal, nil
+	ctx := context.Background()
+	return d.db.Query(ctx, query, bindVars)
 }
 
 // GetParents returns the keys of all parent vertices of the vertex with the key srcKey.
@@ -273,7 +272,7 @@ func (d *DAG) GetShortestPath(srcKey, dstKey string) (<-chan string, <-chan erro
 // it.
 //
 // GetParents "immediately" closes the string-channel, if there is no parents.
-func (d *DAG) GetParents(srcKey string) (<-chan string, <-chan error, chan<- bool, error) {
+func (d *DAG) GetParents(srcKey string) (driver.Cursor, error) {
 	return d.getRelatives(srcKey, false, 1, false)
 }
 
@@ -289,7 +288,7 @@ func (d *DAG) GetParents(srcKey string) (<-chan string, <-chan error, chan<- boo
 //
 // GetAncestors "immediately" closes the string-channel, if there is
 // no ancestors.
-func (d *DAG) GetAncestors(srcKey string, dfs bool) (<-chan string, <-chan error, chan<- bool, error) {
+func (d *DAG) GetAncestors(srcKey string, dfs bool) (driver.Cursor, error) {
 	return d.getRelatives(srcKey, false, maxDepth, dfs)
 }
 
@@ -305,16 +304,16 @@ func (d *DAG) GetAncestors(srcKey string, dfs bool) (<-chan string, <-chan error
 //
 // GetDescendants "immediately" closes the string-channel, if there is
 // no ancestors.
-func (d *DAG) GetDescendants(srcKey string, dfs bool) (<-chan string, <-chan error, chan<- bool, error) {
+func (d *DAG) GetDescendants(srcKey string, dfs bool) (driver.Cursor, error) {
 	return d.getRelatives(srcKey, true, maxDepth, dfs)
 }
 
-func (d *DAG) getRelatives(srcKey string, outbound bool, depth int, dfs bool) (<-chan string, <-chan error, chan<- bool, error) {
+func (d *DAG) getRelatives(srcKey string, outbound bool, depth int, dfs bool) (driver.Cursor, error) {
 
 	// get the id of the vertex
 	id, errVertex := d.getVertexId(srcKey)
 	if errVertex != nil {
-		return nil, nil, nil, errVertex
+		return nil, errVertex
 	}
 
 	// compute query options / parameters
@@ -341,8 +340,8 @@ func (d *DAG) getRelatives(srcKey string, outbound bool, depth int, dfs bool) (<
 		"depth":          depth,
 	}
 
-	chanKeys, chanErrors, chanSignal := d.walker(query, bindVars)
-	return chanKeys, chanErrors, chanSignal, nil
+	ctx := context.Background()
+	return d.db.Query(ctx, query, bindVars)
 }
 
 
@@ -389,49 +388,6 @@ func (d *DAG) exists(query string, bindVars map[string]interface{}) (bool, error
 	return cursor.Count() > 0, nil
 }
 
-func (d *DAG) walker(query string, bindVars map[string]interface{}) (<-chan string, <-chan error, chan<- bool) {
-
-	chanKeys := make(chan string)
-	chanErrors := make(chan error)
-	chanSignal := make(chan bool, 1)
-
-	go func() {
-		defer close(chanErrors)
-		defer close(chanKeys)
-		ctx := context.Background()
-		cursor, err := d.db.Query(ctx, query, bindVars)
-		if err != nil {
-			chanErrors <- err
-			return
-		}
-		defer func(){
-			errClose := cursor.Close()
-			if errClose != nil {
-				chanErrors <- errClose
-			}
-		}()
-
-		var key myKey
-		for {
-			_, errRead := cursor.ReadDocument(ctx, &key)
-			if driver.IsNoMoreDocuments(errRead) {
-				return
-			}
-			if errRead != nil {
-				chanErrors <- errRead
-				continue
-			}
-			select {
-			case <-chanSignal:
-				return
-			default:
-				chanKeys <- key.Key
-			}
-		}
-	}()
-
-	return chanKeys, chanErrors, chanSignal
-}
 
 /*
 func (d *DAG) getChildCount(id driver.DocumentID) (uint64, error) {
