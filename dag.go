@@ -111,13 +111,11 @@ func (d *DAG) GetOrder() (uint64, error) {
 	return uint64(count), nil
 }
 
-// GetVertices provides for retrieving the keys of (all) vertices of the DAG.
+// GetVertices executes the query to retrieve all vertices of the DAG.
+// GetVertices returns a cursor that may be used retrieve the vertices
+// one-by-one.
 //
-// GetVertices does not directly return the keys but instead returns 3 channels.
-// The keys may be received from the string-channel. Any errors that occur while
-// querying may be received from the error-channel. And, finally, the
-// bool-channel may be used to prevent further DB-querying by sending true
-// into it.
+// It is up to the caller to close the cursor, if no longer needed.
 func (d *DAG) GetVertices() (driver.Cursor, error) {
 	query := "FOR v IN @@vertexCollection RETURN v"
 	bindVars := map[string]interface{}{
@@ -127,13 +125,11 @@ func (d *DAG) GetVertices() (driver.Cursor, error) {
 	return d.db.Query(ctx, query, bindVars)
 }
 
-// GetLeaves provides for retrieving the keys of (all) leaves of the DAG.
+// GetLeaves executes the query to retrieve all leaves of the DAG.
+// GetLeaves returns a cursor that may be used retrieve the vertices
+// one-by-one.
 //
-// GetLeaves does not directly return the keys but instead returns 3 channels.
-// The keys may be received from the string-channel. Any errors that occur while
-// querying may be received from the error-channel. And, finally, the
-// bool-channel may be used to prevent further DB-querying by sending true
-// into it.
+// It is up to the caller to close the cursor, if no longer needed.
 func (d *DAG) GetLeaves() (driver.Cursor, error) {
 
 	query := "FOR v IN @@vertexCollection " +
@@ -147,13 +143,11 @@ func (d *DAG) GetLeaves() (driver.Cursor, error) {
 	return d.db.Query(ctx, query, bindVars)
 }
 
-// GetRoots provides for retrieving the keys of (all) roots of the DAG.
+// GetRoots executes the query to retrieve all roots of the DAG.
+// GetRoots returns a cursor that may be used retrieve the vertices
+// one-by-one.
 //
-// GetRoots does not directly return the keys but instead returns 3 channels. The
-// keys may be received from the string-channel. Any errors that occur while
-// querying may be received from the error-channel. And, finally, the
-// bool-channel may be used to prevent further DB-querying by sending true into
-// it.
+// It is up to the caller to close the cursor, if no longer needed.
 func (d *DAG) GetRoots() (driver.Cursor, error) {
 	query := "FOR v IN @@vertexCollection " +
 		"FILTER LENGTH(FOR vv IN 1..1 INBOUND v @@edgeCollection LIMIT 1 RETURN 1) == 0 " +
@@ -233,17 +227,12 @@ func (d *DAG) GetSize() (uint64, error) {
 	return uint64(count), nil
 }
 
-// GetShortestPath returns the keys of the vertices on the shortest path between
-// the vertex with the key srcKey and the vertex with the key dstKey.
+// GetShortestPath executes the query to retrieve the vertices on the shortest
+// path between the vertex with the key srcKey and the vertex with the key
+// dstKey. GetShortestPath returns a cursor that may be used retrieve the
+// vertices one-by-one.
 //
-// GetShortestPath does not directly return the keys but instead returns 3 channels. The
-// keys may be received from the string-channel. Any errors that occur while
-// querying may be received from the error-channel. And, finally, the
-// bool-channel may be used to prevent further DB-querying by sending true into
-// it.
-//
-// GetShortestPath "immediately" closes the string-channel, if there is
-// no such path.
+// It is up to the caller to close the cursor, if no longer needed.
 func (d *DAG) GetShortestPath(srcKey, dstKey string) (driver.Cursor, error) {
 	srcId, errSrc := d.getVertexId(srcKey)
 	if errSrc != nil {
@@ -263,47 +252,30 @@ func (d *DAG) GetShortestPath(srcKey, dstKey string) (driver.Cursor, error) {
 	return d.db.Query(ctx, query, bindVars)
 }
 
-// GetParents returns the keys of all parent vertices of the vertex with the key srcKey.
+
+// GetParents executes the query to retrieve all parents of the vertex with the key
+// srcKey. GetParents returns a cursor that may be used retrieve the vertices
+// one-by-one.
 //
-// GetParents does not directly return the keys but instead returns 3 channels.
-// The keys may be received from the string-channel. Any errors that occur while
-// querying may be received from the error-channel. And, finally, the
-// bool-channel may be used to prevent further DB-querying by sending true into
-// it.
-//
-// GetParents "immediately" closes the string-channel, if there is no parents.
+// It is up to the caller to close the cursor, if no longer needed.
 func (d *DAG) GetParents(srcKey string) (driver.Cursor, error) {
 	return d.getRelatives(srcKey, false, 1, false)
 }
 
-// GetAncestors returns the keys of all ancestor vertices of the vertex with the key srcKey in
-// breadth first order. If dfs is set to true, the traversal will be executed
-// depth-first.
+// GetAncestors executes the query to retrieve all ancestors of the vertex with the key
+// srcKey. GetAncestors returns a cursor that may be used retrieve the vertices
+// one-by-one.
 //
-// GetAncestors does not directly return the keys but instead returns 3 channels. The
-// keys may be received from the string-channel. Any errors that occur while
-// querying may be received from the error-channel. And, finally, the
-// bool-channel may be used to prevent further DB-querying by sending true into
-// it.
-//
-// GetAncestors "immediately" closes the string-channel, if there is
-// no ancestors.
+// It is up to the caller to close the cursor, if no longer needed.
 func (d *DAG) GetAncestors(srcKey string, dfs bool) (driver.Cursor, error) {
 	return d.getRelatives(srcKey, false, maxDepth, dfs)
 }
 
-// GetDescendants returns the keys of all descendant vertices of the vertex with the key srcKey in
-// breadth first order. If dfs is set to true, the traversal will be executed
-// depth-first.
+// GetDescendants executes the query to retrieve all descendants of the vertex with the key
+// srcKey. GetDescendants returns a cursor that may be used retrieve the vertices
+// one-by-one.
 //
-// GetDescendants does not directly return the keys but instead returns 3 channels. The
-// keys may be received from the string-channel. Any errors that occur while
-// querying may be received from the error-channel. And, finally, the
-// bool-channel may be used to prevent further DB-querying by sending true into
-// it.
-//
-// GetDescendants "immediately" closes the string-channel, if there is
-// no ancestors.
+// It is up to the caller to close the cursor, if no longer needed.
 func (d *DAG) GetDescendants(srcKey string, dfs bool) (driver.Cursor, error) {
 	return d.getRelatives(srcKey, true, maxDepth, dfs)
 }
