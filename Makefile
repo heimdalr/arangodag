@@ -25,6 +25,12 @@ lint:
 coverage:
 	go test -coverprofile=c.out && go tool cover -html=c.out
 
+start_doc:
+	godoc -http=:6060
+
+open_doc:
+	gio open http://localhost:6060/pkg/github.com/heimdalr/arangodag/
+
 clean:
 	rm -f c.out
 
