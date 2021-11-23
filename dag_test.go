@@ -143,7 +143,6 @@ func TestDAG_GetOrder(t *testing.T) {
 	}
 }
 
-
 func TestDAG_GetVertices(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -598,6 +597,44 @@ func TestDAG_GetAncestors(t *testing.T) {
 	}
 }
 
+func TestDAG_GetChildren(t *testing.T) {
+	t.Parallel()
+	d := standardDAG(t)
+	tests := []struct {
+		name   string
+		want   []string
+		srcKey string
+	}{
+		{
+			name:   "no children",
+			want:   nil,
+			srcKey: "4",
+		},
+		{
+			name:   "one child",
+			want:   []string{"4"},
+			srcKey: "3",
+		},
+		{
+			name:   "two children",
+			want:   []string{"4", "2"},
+			srcKey: "1",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cursor, err := d.GetChildren(tt.srcKey)
+			got := collector(t, cursor, err)
+			if err != nil {
+				t.Error(err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestDAG_GetDescendants(t *testing.T) {
 	t.Parallel()
 	d := standardDAG(t)
@@ -683,7 +720,6 @@ func collector(t *testing.T, cursor driver.Cursor, errFn error) []string {
 	}
 	return collect
 }
-
 
 func standardDAG(t *testing.T) *arangodag.DAG {
 

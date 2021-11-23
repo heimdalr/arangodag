@@ -271,6 +271,15 @@ func (d *DAG) GetAncestors(srcKey string, dfs bool) (driver.Cursor, error) {
 	return d.getRelatives(srcKey, false, maxDepth, dfs)
 }
 
+// GetChildren executes the query to retrieve all children of the vertex with the key
+// srcKey. GetChildren returns a cursor that may be used retrieve the vertices
+// one-by-one.
+//
+// It is up to the caller to close the cursor, if no longer needed.
+func (d *DAG) GetChildren(srcKey string) (driver.Cursor, error) {
+	return d.getRelatives(srcKey, true, 1, false)
+}
+
 // GetDescendants executes the query to retrieve all descendants of the vertex with the key
 // srcKey. GetDescendants returns a cursor that may be used retrieve the vertices
 // one-by-one.
