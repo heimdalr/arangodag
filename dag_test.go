@@ -1,4 +1,4 @@
-package arangodag
+package arangodag_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"github.com/arangodb/go-driver"
 	"github.com/arangodb/go-driver/http"
 	"github.com/go-test/deep"
+	"github.com/heimdalr/arangodag"
 	"os"
 	"reflect"
 	"strconv"
@@ -167,21 +168,21 @@ func collector(t *testing.T, cursor driver.Cursor, errFn error) []string {
 
 func TestDAG_GetVertices(t *testing.T) {
 	tests := []struct {
-		d *DAG
+		d *arangodag.DAG
 		name  string
-		prepare func(d *DAG)
+		prepare func(d *arangodag.DAG)
 		want  []string
 	}{
 		{
 			d: someNewDag(t),
 			name:    "no vertex",
-			prepare: func(d *DAG) {},
+			prepare: func(d *arangodag.DAG) {},
 			want:    nil,
 		},
 		{
 			d: someNewDag(t),
 			name:    "single vertex",
-			prepare: func(d *DAG) {
+			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 			},
 			want:    []string{"0"},
@@ -189,7 +190,7 @@ func TestDAG_GetVertices(t *testing.T) {
 		{
 			d: someNewDag(t),
 			name:    "two vertices",
-			prepare: func(d *DAG) {
+			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 				_, _ = d.AddVertex(idVertex{"1"})
 			},
@@ -198,7 +199,7 @@ func TestDAG_GetVertices(t *testing.T) {
 		{
 			d: someNewDag(t),
 			name:    "10 vertices",
-			prepare: func(d *DAG) {
+			prepare: func(d *arangodag.DAG) {
 				for i := 0; i < 10; i++ {
 					dstKey := strconv.Itoa(i)
 					_, _ = d.AddVertex(idVertex{dstKey})
@@ -221,21 +222,21 @@ func TestDAG_GetVertices(t *testing.T) {
 
 func TestDAG_GetLeaves(t *testing.T) {
 	tests := []struct {
-		d *DAG
+		d *arangodag.DAG
 		name  string
-		prepare func(d *DAG)
+		prepare func(d *arangodag.DAG)
 		want  []string
 	}{
 		{
 			d: someNewDag(t),
 			name:    "no vertex",
-			prepare: func(d *DAG) {},
+			prepare: func(d *arangodag.DAG) {},
 			want:    nil,
 		},
 		{
 			d: someNewDag(t),
 			name:    "single vertex",
-			prepare: func(d *DAG) {
+			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 			},
 			want:    []string{"0"},
@@ -243,7 +244,7 @@ func TestDAG_GetLeaves(t *testing.T) {
 		{
 			d: someNewDag(t),
 			name:    "one \"real\" leave",
-			prepare: func(d *DAG) {
+			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 				_, _ = d.AddVertex(idVertex{"1"})
 				_ = d.AddEdge("0", "1")
@@ -253,7 +254,7 @@ func TestDAG_GetLeaves(t *testing.T) {
 		{
 			d: someNewDag(t),
 			name:    "10 leaves",
-			prepare: func(d *DAG) {
+			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 				for i := 1; i < 10; i++ {
 					dstKey := strconv.Itoa(i)
@@ -278,21 +279,21 @@ func TestDAG_GetLeaves(t *testing.T) {
 
 func TestDAG_GetRoots(t *testing.T) {
 	tests := []struct {
-		d *DAG
+		d *arangodag.DAG
 		name  string
-		prepare func(d *DAG)
+		prepare func(d *arangodag.DAG)
 		want  []string
 	}{
 		{
 			d: someNewDag(t),
 			name:    "no vertex",
-			prepare: func(d *DAG) {},
+			prepare: func(d *arangodag.DAG) {},
 			want:    nil,
 		},
 		{
 			d: someNewDag(t),
 			name:    "single vertex",
-			prepare: func(d *DAG) {
+			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 			},
 			want:    []string{"0"},
@@ -300,7 +301,7 @@ func TestDAG_GetRoots(t *testing.T) {
 		{
 			d: someNewDag(t),
 			name:    "one \"real\" root",
-			prepare: func(d *DAG) {
+			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 				_, _ = d.AddVertex(idVertex{"1"})
 				_ = d.AddEdge("0", "1")
@@ -310,7 +311,7 @@ func TestDAG_GetRoots(t *testing.T) {
 		{
 			d: someNewDag(t),
 			name:    "10 leaves",
-			prepare: func(d *DAG) {
+			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 				_, _ = d.AddVertex(idVertex{"1"})
 				_ = d.AddEdge("0", "1")
@@ -337,9 +338,9 @@ func TestDAG_GetRoots(t *testing.T) {
 
 func TestDAG_AddEdge(t *testing.T) {
 	tests := []struct {
-		d *DAG
+		d *arangodag.DAG
 		name  string
-		prepare func(d *DAG)
+		prepare func(d *arangodag.DAG)
 		want  error
 		srcKey string
 		dstKey string
@@ -347,7 +348,7 @@ func TestDAG_AddEdge(t *testing.T) {
 		{
 			d:       someNewDag(t),
 			name:    "happy path",
-			prepare: func(d *DAG) {
+			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 				_, _ = d.AddVertex(idVertex{"1"})
 			},
@@ -358,7 +359,7 @@ func TestDAG_AddEdge(t *testing.T) {
 		{
 			d:       someNewDag(t),
 			name:    "unknown Vertex",
-			prepare: func(d *DAG) {
+			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 				_, _ = d.AddVertex(idVertex{"1"})
 			},
@@ -374,7 +375,7 @@ func TestDAG_AddEdge(t *testing.T) {
 		{
 			d:       someNewDag(t),
 			name:    "duplicate edge",
-			prepare: func(d *DAG) {
+			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 				_, _ = d.AddVertex(idVertex{"1"})
 				err := d.AddEdge("0", "1")
@@ -389,7 +390,7 @@ func TestDAG_AddEdge(t *testing.T) {
 		{
 			d:       someNewDag(t),
 			name:    "loop",
-			prepare: func(d *DAG) {
+			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 				_, _ = d.AddVertex(idVertex{"1"})
 				err := d.AddEdge("0", "1")
@@ -673,7 +674,7 @@ func TestDAG_GetDescendants(t *testing.T) {
 	}
 }
 
-func standardDAG(t *testing.T) *DAG {
+func standardDAG(t *testing.T) *arangodag.DAG {
 
 	/*
 	     0   5
@@ -703,7 +704,7 @@ func standardDAG(t *testing.T) *DAG {
 	return d
 }
 
-func someNewDag(t *testing.T) *DAG {
+func someNewDag(t *testing.T) *arangodag.DAG {
 
 	// get arangoDB host and port from environment
 	host := os.Getenv("ARANGODB_HOST")
@@ -735,7 +736,7 @@ func someNewDag(t *testing.T) *DAG {
 	vertexCollName := someName()
 	edgeCollName := someName()
 
-	d, err := NewDAG(dbName, vertexCollName, edgeCollName, client)
+	d, err := arangodag.NewDAG(dbName, vertexCollName, edgeCollName, client)
 	if err != nil {
 		t.Fatalf("failed to setup new dag: %v", err)
 	}
