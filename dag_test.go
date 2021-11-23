@@ -27,10 +27,12 @@ type foobarKey struct {
 }
 
 func TestNewDAG(t *testing.T) {
+	t.Parallel()
 	someNewDag(t)
 }
 
 func TestDAG_AddVertex(t *testing.T) {
+	t.Parallel()
 	d := someNewDag(t)
 
 	// simple vertex
@@ -66,6 +68,7 @@ func TestDAG_AddVertex(t *testing.T) {
 }
 
 func TestDAG_GetVertex(t *testing.T) {
+	t.Parallel()
 	d := someNewDag(t)
 
 	v0 := idVertex{Key: "1"}
@@ -118,6 +121,7 @@ func TestDAG_GetVertex(t *testing.T) {
 }
 
 func TestDAG_GetOrder(t *testing.T) {
+	t.Parallel()
 	d := someNewDag(t)
 	order, err := d.GetOrder()
 	if err != nil {
@@ -139,33 +143,9 @@ func TestDAG_GetOrder(t *testing.T) {
 	}
 }
 
-func collector(t *testing.T, cursor driver.Cursor, errFn error) []string {
-	if errFn != nil {
-		t.Fatal(errFn)
-	}
-	defer func() {
-		errClose := cursor.Close()
-		if errClose != nil {
-			t.Error(errClose)
-		}
-	}()
-	ctx := context.Background()
-	var vertex driver.DocumentMeta
-	var collect []string
-	for {
-		_, errRead := cursor.ReadDocument(ctx, &vertex)
-		if driver.IsNoMoreDocuments(errRead) {
-			break
-		}
-		if errRead != nil {
-			t.Fatal(errRead)
-		}
-		collect = append(collect, vertex.Key)
-	}
-	return collect
-}
 
 func TestDAG_GetVertices(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		d       *arangodag.DAG
 		name    string
@@ -220,6 +200,7 @@ func TestDAG_GetVertices(t *testing.T) {
 }
 
 func TestDAG_GetLeaves(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		d       *arangodag.DAG
 		name    string
@@ -277,6 +258,7 @@ func TestDAG_GetLeaves(t *testing.T) {
 }
 
 func TestDAG_GetRoots(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		d       *arangodag.DAG
 		name    string
@@ -336,6 +318,7 @@ func TestDAG_GetRoots(t *testing.T) {
 }
 
 func TestDAG_AddEdge(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		d       *arangodag.DAG
 		name    string
@@ -414,6 +397,7 @@ func TestDAG_AddEdge(t *testing.T) {
 }
 
 func TestDAG_EdgeExists(t *testing.T) {
+	t.Parallel()
 	d := someNewDag(t)
 	k1, _ := d.AddVertex(idVertex{"0"})
 	k2, _ := d.AddVertex(idVertex{"1"})
@@ -444,6 +428,7 @@ func TestDAG_EdgeExists(t *testing.T) {
 }
 
 func TestDAG_GetSize(t *testing.T) {
+	t.Parallel()
 	d := someNewDag(t)
 	got, err := d.GetSize()
 	if err != nil {
@@ -468,6 +453,7 @@ func TestDAG_GetSize(t *testing.T) {
 }
 
 func TestDAG_GetShortestPath(t *testing.T) {
+	t.Parallel()
 	d := standardDAG(t)
 	tests := []struct {
 		name   string
@@ -515,6 +501,7 @@ func TestDAG_GetShortestPath(t *testing.T) {
 }
 
 func TestDAG_GetParents(t *testing.T) {
+	t.Parallel()
 	d := standardDAG(t)
 	tests := []struct {
 		name   string
@@ -552,6 +539,7 @@ func TestDAG_GetParents(t *testing.T) {
 }
 
 func TestDAG_GetAncestors(t *testing.T) {
+	t.Parallel()
 	d := standardDAG(t)
 	tests := []struct {
 		name   string
@@ -611,6 +599,7 @@ func TestDAG_GetAncestors(t *testing.T) {
 }
 
 func TestDAG_GetDescendants(t *testing.T) {
+	t.Parallel()
 	d := standardDAG(t)
 	tests := []struct {
 		name   string
@@ -668,6 +657,33 @@ func TestDAG_GetDescendants(t *testing.T) {
 		})
 	}
 }
+
+func collector(t *testing.T, cursor driver.Cursor, errFn error) []string {
+	if errFn != nil {
+		t.Fatal(errFn)
+	}
+	defer func() {
+		errClose := cursor.Close()
+		if errClose != nil {
+			t.Error(errClose)
+		}
+	}()
+	ctx := context.Background()
+	var vertex driver.DocumentMeta
+	var collect []string
+	for {
+		_, errRead := cursor.ReadDocument(ctx, &vertex)
+		if driver.IsNoMoreDocuments(errRead) {
+			break
+		}
+		if errRead != nil {
+			t.Fatal(errRead)
+		}
+		collect = append(collect, vertex.Key)
+	}
+	return collect
+}
+
 
 func standardDAG(t *testing.T) *arangodag.DAG {
 

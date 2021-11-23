@@ -20,7 +20,7 @@ fmt:
 	gofmt -s -w .
 
 test:
-	go test -v ./...
+	go test -p 4 -v ./...
 
 lint:
 	golangci-lint run
