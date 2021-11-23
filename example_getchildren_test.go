@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func ExampleGetChildren() {
+func ExampleDAG_GetChildren() {
 
 	// new arangoDB connection
 	conn, _ := http.NewConnection(http.ConnectionConfig{Endpoints: []string{"http://localhost:8529"}})
