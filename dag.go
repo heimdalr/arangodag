@@ -99,6 +99,40 @@ func (d *DAG) GetVertex(key string, vertex interface{}) error {
 	return nil
 }
 
+// DelVertex removes the vertex with the given key. DelVertex also removes any
+// inbound and outbound edges.
+func (d *DAG) DelVertex(srcKey string) (err error) {
+
+	// delete edges
+	srcId, errSrc := d.getVertexId(srcKey)
+	if errSrc != nil {
+		return errSrc
+	}
+	query := "FOR e IN @@edgeCollection " +
+		"FILTER e._from == @from || e._to == @from " +
+		"REMOVE { _key: e._key } IN @@edgeCollection"
+	bindVars := map[string]interface{}{
+		"from":            srcId,
+		"@edgeCollection": d.edges.Name(),
+	}
+	ctx := driver.WithQueryCount(context.Background())
+	cursor, errEdges := d.db.Query(ctx, query, bindVars)
+	if errEdges != nil {
+		return errEdges
+	}
+	errCursor := cursor.Close()
+	if errCursor != nil {
+		err = errCursor
+	}
+
+	// remove vertex
+	_, errVert := d.vertices.RemoveDocument(ctx, srcKey)
+	if errVert != nil {
+		return errVert
+	}
+	return
+}
+
 // GetOrder returns the number of vertices in the graph.
 func (d *DAG) GetOrder() (uint64, error) {
 	count, err := d.vertices.Count(context.Background())

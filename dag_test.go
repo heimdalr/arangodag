@@ -395,6 +395,66 @@ func TestDAG_AddEdge(t *testing.T) {
 	}
 }
 
+func TestDAG_DelVertex(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		d         *arangodag.DAG
+		name      string
+		prepare   func(d *arangodag.DAG)
+		wantOrder uint64
+		wantSize  uint64
+		srcKey    string
+	}{
+		{
+			d:         standardDAG(t),
+			name:      "two edges",
+			prepare:   func(d *arangodag.DAG) {},
+			wantOrder: 5,
+			wantSize:  4,
+			srcKey:    "0",
+		},
+		{
+			d:         standardDAG(t),
+			name:      "no edges",
+			prepare:   func(d *arangodag.DAG) {},
+			wantOrder: 5,
+			wantSize:  6,
+			srcKey:    "5",
+		},
+		{
+			d:         standardDAG(t),
+			name:      "in between",
+			prepare:   func(d *arangodag.DAG) {},
+			wantOrder: 5,
+			wantSize:  4,
+			srcKey:    "2",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.prepare(tt.d)
+			err := tt.d.DelVertex(tt.srcKey)
+			if err != nil {
+				t.Error(err)
+			}
+			gotOrder, errOrder := tt.d.GetOrder()
+			if errOrder != nil {
+				t.Error(errOrder)
+			}
+			if gotOrder != tt.wantOrder {
+				t.Errorf("got %v, want %v", gotOrder, tt.wantOrder)
+			}
+			gotSize, errSize := tt.d.GetSize()
+			if errSize != nil {
+				t.Error(errSize)
+			}
+			if gotSize != tt.wantSize {
+				t.Errorf("got %v, want %v", gotSize, tt.wantSize)
+			}
+		})
+	}
+}
+
 func TestDAG_EdgeExists(t *testing.T) {
 	t.Parallel()
 	d := someNewDag(t)
