@@ -329,34 +329,34 @@ func TestDAG_AddEdge(t *testing.T) {
 	t.Parallel()
 	d := standardDAG(t)
 	tests := []struct {
-		name    string
-		wantError     error
-		wantArangoErr bool
+		name             string
+		wantError        error
+		wantArangoErr    bool
 		wantArangoErrNum int
-		srcKey  string
-		dstKey  string
+		srcKey           string
+		dstKey           string
 	}{
 		{
-			name: "happy path",
+			name:   "happy path",
 			srcKey: "0",
 			dstKey: "5",
 		},
 		{
-			name: "unknown Vertex",
-			wantArangoErr: true,
-			wantArangoErrNum:   1202,
-			srcKey: "0",
-			dstKey: "6",
+			name:             "unknown Vertex",
+			wantArangoErr:    true,
+			wantArangoErrNum: 1202,
+			srcKey:           "0",
+			dstKey:           "6",
 		},
 		{
-			name: "duplicate edge",
-			wantArangoErr: true,
-			wantArangoErrNum:   1210,
-			srcKey: "0",
-			dstKey: "1",
+			name:             "duplicate edge",
+			wantArangoErr:    true,
+			wantArangoErrNum: 1210,
+			srcKey:           "0",
+			dstKey:           "1",
 		},
 		{
-			name: "loop",
+			name:      "loop",
 			wantError: errors.New("loop"),
 			srcKey:    "1",
 			dstKey:    "0",
@@ -366,10 +366,10 @@ func TestDAG_AddEdge(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_, got := d.AddEdge(tt.srcKey, tt.dstKey)
 			if tt.wantArangoErr && !driver.IsArangoErrorWithErrorNum(got, tt.wantArangoErrNum) {
-					t.Errorf("got %v, want arango Error with Num %d", got, tt.wantArangoErrNum)
+				t.Errorf("got %v, want arango Error with Num %d", got, tt.wantArangoErrNum)
 			}
 			if tt.wantError != nil && !reflect.DeepEqual(got, tt.wantError) {
-					t.Errorf("got %v, want Error %v", got, tt.wantError)
+				t.Errorf("got %v, want Error %v", got, tt.wantError)
 			}
 		})
 	}
