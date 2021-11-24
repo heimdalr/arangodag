@@ -1,3 +1,5 @@
+name: Lint
+
 on:
   push:
     branches:
@@ -6,9 +8,8 @@ on:
     branches:
       - main
 
-name: Lint
 jobs:
-  lint:
+  Lint:
     runs-on: ubuntu-latest
     steps:
       - name: Install Go
