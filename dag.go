@@ -22,13 +22,13 @@ type DAG struct {
 }
 
 // NewDAG creates / initializes a new DAG.
-func NewDAG(dbName, vertexCollName, edgeCollName string, client driver.Client) (*DAG, error) {
+func NewDAG(dbName, vertexCollName, edgeCollName string, client driver.Client) (d *DAG, err error) {
 
 	// use or create database
 	var db driver.Database
-	exists, err := client.DatabaseExists(context.Background(), dbName)
-	if err != nil {
-		return nil, err
+	var exists bool
+	if exists, err = client.DatabaseExists(context.Background(), dbName); err != nil {
+		return
 	}
 	if exists {
 		db, err = client.Database(context.Background(), dbName)
@@ -36,14 +36,13 @@ func NewDAG(dbName, vertexCollName, edgeCollName string, client driver.Client) (
 		db, err = client.CreateDatabase(context.Background(), dbName, nil)
 	}
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	// use or create vertex collection
 	var vertices driver.Collection
-	exists, err = db.CollectionExists(context.Background(), vertexCollName)
-	if err != nil {
-		return nil, err
+	if exists, err = db.CollectionExists(context.Background(), vertexCollName); err != nil {
+		return
 	}
 	if exists {
 		vertices, err = db.Collection(context.Background(), vertexCollName)
@@ -51,14 +50,13 @@ func NewDAG(dbName, vertexCollName, edgeCollName string, client driver.Client) (
 		vertices, err = db.CreateCollection(context.Background(), vertexCollName, nil)
 	}
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	// use or create edge collection
 	var edges driver.Collection
-	exists, err = db.CollectionExists(context.Background(), edgeCollName)
-	if err != nil {
-		return nil, err
+	if exists, err = db.CollectionExists(context.Background(), edgeCollName); err != nil {
+		return
 	}
 	if exists {
 		edges, err = db.Collection(context.Background(), edgeCollName)
@@ -69,14 +67,16 @@ func NewDAG(dbName, vertexCollName, edgeCollName string, client driver.Client) (
 		edges, err = db.CreateCollection(context.Background(), edgeCollName, collectionOptions)
 
 		// ensure unique edges (from->to) (see: https://stackoverflow.com/a/43006762)
-		edges.EnsureHashIndex(
+		if _, _, err = edges.EnsureHashIndex(
 			context.Background(),
 			[]string{"_from", "_to"},
 			&driver.EnsureHashIndexOptions{Unique: true},
-		)
+		); err != nil {
+			return
+		}
 	}
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	return &DAG{db: db, vertices: vertices, edges: edges, client: client}, nil
