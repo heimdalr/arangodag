@@ -197,17 +197,17 @@ func (d *DAG) GetRoots() (driver.Cursor, error) {
 func (d *DAG) AddEdge(srcKey, dstKey string) (key string, err error) {
 
 	// ensure vertices exist
-	var srcId, dstId string
-	if srcId, err = d.getVertexId(srcKey); err != nil {
+	var srcID, dstID string
+	if srcID, err = d.getVertexID(srcKey); err != nil {
 		return
 	}
-	if dstId, err = d.getVertexId(dstKey); err != nil {
+	if dstID, err = d.getVertexID(dstKey); err != nil {
 		return
 	}
 
 	// prevent loops
 	var pathExists bool
-	if pathExists, err = d.pathExists(dstId, srcId); err != nil {
+	if pathExists, err = d.pathExists(dstID, srcID); err != nil {
 		return
 	}
 	if pathExists {
@@ -220,7 +220,7 @@ func (d *DAG) AddEdge(srcKey, dstKey string) (key string, err error) {
 	edge := struct {
 		From string `json:"_from"`
 		To   string `json:"_to"`
-	}{srcId, dstId}
+	}{srcID, dstID}
 	if meta, err = d.edges.CreateDocument(ctx, edge); err != nil {
 		return
 	}
@@ -231,9 +231,9 @@ func (d *DAG) AddEdge(srcKey, dstKey string) (key string, err error) {
 // the vertex with the key dstKey exists. If one or both of the vertices don't
 // exist, EdgeExists simply returns false.
 func (d *DAG) EdgeExists(srcKey, dstKey string) (bool, error) {
-	srcId := driver.NewDocumentID(d.vertices.Name(), srcKey).String()
-	dstId := driver.NewDocumentID(d.vertices.Name(), dstKey).String()
-	return d.edgeExists(srcId, dstId)
+	srcID := driver.NewDocumentID(d.vertices.Name(), srcKey).String()
+	dstID := driver.NewDocumentID(d.vertices.Name(), dstKey).String()
+	return d.edgeExists(srcID, dstID)
 }
 
 // GetSize returns the number of edges in the DAG.
@@ -262,19 +262,19 @@ func (d *DAG) GetEdges() (driver.Cursor, error) {
 //
 // It is up to the caller to close the cursor, if no longer needed.
 func (d *DAG) GetShortestPath(srcKey, dstKey string) (driver.Cursor, error) {
-	srcId, errSrc := d.getVertexId(srcKey)
+	srcID, errSrc := d.getVertexID(srcKey)
 	if errSrc != nil {
 		return nil, errSrc
 	}
-	dstId, errDst := d.getVertexId(dstKey)
+	dstID, errDst := d.getVertexID(dstKey)
 	if errDst != nil {
 		return nil, errDst
 	}
 	query := "FOR v IN OUTBOUND SHORTEST_PATH @from TO @to @@collection RETURN v"
 	bindVars := map[string]interface{}{
 		"@collection": d.edges.Name(),
-		"from":        srcId,
-		"to":          dstId,
+		"from":        srcID,
+		"to":          dstID,
 	}
 	ctx := context.Background()
 	return d.db.Query(ctx, query, bindVars)
@@ -381,7 +381,7 @@ func (d *DAG) String() (result string, err error) {
 func (d *DAG) getRelatives(srcKey string, outbound bool, depth int, dfs bool) (driver.Cursor, error) {
 
 	// get the id of the vertex
-	id, errVertex := d.getVertexId(srcKey)
+	id, errVertex := d.getVertexID(srcKey)
 	if errVertex != nil {
 		return nil, errVertex
 	}
@@ -414,7 +414,7 @@ func (d *DAG) getRelatives(srcKey string, outbound bool, depth int, dfs bool) (d
 	return d.db.Query(ctx, query, bindVars)
 }
 
-func (d *DAG) getVertexId(key string) (string, error) {
+func (d *DAG) getVertexID(key string) (string, error) {
 	ctx := context.Background()
 	var data driver.DocumentMeta
 	meta, err := d.vertices.ReadDocument(ctx, key, &data)
@@ -424,22 +424,22 @@ func (d *DAG) getVertexId(key string) (string, error) {
 	return string(meta.ID), nil
 }
 
-func (d *DAG) edgeExists(srcId, dstId string) (bool, error) {
+func (d *DAG) edgeExists(srcID, dstID string) (bool, error) {
 	query := "FOR v IN 1..1 OUTBOUND @from @@collection FILTER v._id == @to LIMIT 1 RETURN v"
 	bindVars := map[string]interface{}{
 		"@collection": d.edges.Name(),
-		"from":        srcId,
-		"to":          dstId,
+		"from":        srcID,
+		"to":          dstID,
 	}
 	return d.exists(query, bindVars)
 }
 
-func (d *DAG) pathExists(srcId, dstId string) (bool, error) {
+func (d *DAG) pathExists(srcID, dstID string) (bool, error) {
 	query := "FOR v IN OUTBOUND SHORTEST_PATH @from TO @to @@collection LIMIT 1 RETURN v"
 	bindVars := map[string]interface{}{
 		"@collection": d.edges.Name(),
-		"from":        srcId,
-		"to":          dstId,
+		"from":        srcID,
+		"to":          dstID,
 	}
 	return d.exists(query, bindVars)
 }

@@ -45,12 +45,12 @@ func TestDAG_AddVertex(t *testing.T) {
 	d := someNewDag(t)
 
 	// simple vertex
-	autoId, errAdd1 := d.AddVertex(struct{ foo string }{foo: "1"})
+	autoID, errAdd1 := d.AddVertex(struct{ foo string }{foo: "1"})
 	if errAdd1 != nil {
 		t.Error(errAdd1)
 	}
-	if autoId == "" {
-		t.Errorf("got: %v, wantError id", autoId)
+	if autoID == "" {
+		t.Errorf("got: %v, wantError id", autoID)
 	}
 
 	// vertex with id
