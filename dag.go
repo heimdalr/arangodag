@@ -63,8 +63,17 @@ func NewDAG(dbName, vertexCollName, edgeCollName string, client driver.Client) (
 	if exists {
 		edges, err = db.Collection(context.Background(), edgeCollName)
 	} else {
-		options := &driver.CreateCollectionOptions{Type: driver.CollectionTypeEdge}
-		edges, err = db.CreateCollection(context.Background(), edgeCollName, options)
+		collectionOptions := &driver.CreateCollectionOptions{
+			Type: driver.CollectionTypeEdge,
+		}
+		edges, err = db.CreateCollection(context.Background(), edgeCollName, collectionOptions)
+
+		// ensure unique edges (from->to) (see: https://stackoverflow.com/a/43006762)
+		edges.EnsureHashIndex(
+			context.Background(),
+			[]string{"_from", "_to"},
+			&driver.EnsureHashIndexOptions{Unique: true},
+		)
 	}
 	if err != nil {
 		return nil, err
@@ -100,36 +109,32 @@ func (d *DAG) GetVertex(key string, vertex interface{}) error {
 }
 
 // DelVertex removes the vertex with the given key. DelVertex also removes any
-// inbound and outbound edges.
-func (d *DAG) DelVertex(srcKey string) (err error) {
+// inbound and outbound edges. In case of success, DelVertex returns the number
+// of edges that were removed.
+func (d *DAG) DelVertex(key string) (edgeCount int64, err error) {
 
 	// delete edges
-	srcId, errSrc := d.getVertexId(srcKey)
-	if errSrc != nil {
-		return errSrc
-	}
+	id := driver.NewDocumentID(d.vertices.Name(), key)
 	query := "FOR e IN @@edgeCollection " +
 		"FILTER e._from == @from || e._to == @from " +
-		"REMOVE { _key: e._key } IN @@edgeCollection"
+		"REMOVE { _key: e._key } IN @@edgeCollection " +
+		"RETURN e"
 	bindVars := map[string]interface{}{
-		"from":            srcId,
+		"from":            id,
 		"@edgeCollection": d.edges.Name(),
 	}
 	ctx := driver.WithQueryCount(context.Background())
-	cursor, errEdges := d.db.Query(ctx, query, bindVars)
-	if errEdges != nil {
-		return errEdges
+	var cursor driver.Cursor
+	if cursor, err = d.db.Query(ctx, query, bindVars); err != nil {
+		return
 	}
-	errCursor := cursor.Close()
-	if errCursor != nil {
-		err = errCursor
+	edgeCount = cursor.Count()
+	if err = cursor.Close(); err != nil {
+		return
 	}
 
 	// remove vertex
-	_, errVert := d.vertices.RemoveDocument(ctx, srcKey)
-	if errVert != nil {
-		return errVert
-	}
+	_, err = d.vertices.RemoveDocument(ctx, key)
 	return
 }
 
@@ -192,64 +197,49 @@ func (d *DAG) GetRoots() (driver.Cursor, error) {
 }
 
 // AddEdge adds an edge from the vertex with the key srcKey to the vertex with
-// the key dstKey.
+// the key dstKey and returns the key of the new edge.
 //
 // AddEdge prevents duplicate edges and loops (and thereby maintains a valid
 // DAG).
-func (d *DAG) AddEdge(srcKey, dstKey string) error {
+func (d *DAG) AddEdge(srcKey, dstKey string) (key string, err error) {
 
 	// ensure vertices exist
-	srcId, errSrc := d.getVertexId(srcKey)
-	if errSrc != nil {
-		return errSrc
+	var srcId, dstId string
+	if srcId, err = d.getVertexId(srcKey); err != nil {
+		return
 	}
-	dstId, errDst := d.getVertexId(dstKey)
-	if errDst != nil {
-		return errDst
-	}
-
-	// prevent duplicate edge
-	existsEdge, errEdge := d.edgeExists(srcId, dstId)
-	if errEdge != nil {
-		return errEdge
-	}
-	if existsEdge {
-		return errors.New("duplicate edge")
+	if dstId, err = d.getVertexId(dstKey); err != nil {
+		return
 	}
 
 	// prevent loops
-	pathExists, errSrc := d.pathExists(dstId, srcId)
-	if errSrc != nil {
-		return errSrc
+	var pathExists bool
+	if pathExists, err = d.pathExists(dstId, srcId); err != nil {
+		return
 	}
 	if pathExists {
-		return errors.New("loop")
+		return key, errors.New("loop")
 	}
 
 	// add edge
+	var meta driver.DocumentMeta
 	ctx := context.Background()
 	edge := struct {
 		From string `json:"_from"`
 		To   string `json:"_to"`
 	}{srcId, dstId}
-	_, err := d.edges.CreateDocument(ctx, edge)
-	if err != nil {
-		return err
+	if meta, err = d.edges.CreateDocument(ctx, edge); err != nil {
+		return
 	}
-	return nil
+	return meta.Key, nil
 }
 
-// EdgeExists returns true, if an edge between the vertex with the key srcKey and the
-// vertex with the key dstKey exists.
+// EdgeExists returns true, if an edge between the vertex with the key srcKey and
+// the vertex with the key dstKey exists. If one or both of the vertices don't
+// exist, EdgeExists simply returns false.
 func (d *DAG) EdgeExists(srcKey, dstKey string) (bool, error) {
-	srcId, errSrc := d.getVertexId(srcKey)
-	if errSrc != nil {
-		return false, errSrc
-	}
-	dstId, errDst := d.getVertexId(dstKey)
-	if errDst != nil {
-		return false, errDst
-	}
+	srcId := driver.NewDocumentID(d.vertices.Name(), srcKey).String()
+	dstId := driver.NewDocumentID(d.vertices.Name(), dstKey).String()
 	return d.edgeExists(srcId, dstId)
 }
 

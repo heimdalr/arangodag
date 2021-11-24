@@ -26,6 +26,15 @@ type foobarKey struct {
 	Key string `json:"_key"`
 }
 
+var (
+	documentNotFoundError = driver.ArangoError{
+		HasError:     true,
+		Code:         404,
+		ErrorNum:     1202,
+		ErrorMessage: "document not found",
+	}
+)
+
 func TestNewDAG(t *testing.T) {
 	t.Parallel()
 	someNewDag(t)
@@ -41,7 +50,7 @@ func TestDAG_AddVertex(t *testing.T) {
 		t.Error(errAdd1)
 	}
 	if autoId == "" {
-		t.Errorf("got: %v, want id", autoId)
+		t.Errorf("got: %v, wantError id", autoId)
 	}
 
 	// vertex with id
@@ -51,19 +60,19 @@ func TestDAG_AddVertex(t *testing.T) {
 		t.Error(errAdd2)
 	}
 	if idReturned != id {
-		t.Errorf("got '%s', want %s", idReturned, id)
+		t.Errorf("got '%s', wantError %s", idReturned, id)
 	}
 
 	// duplicate
 	_, errDuplicate := d.AddVertex(idVertex{Key: "1"})
 	if errDuplicate == nil {
-		t.Errorf("got 'nil', want duplicate Error")
+		t.Errorf("got 'nil', wantError duplicate Error")
 	}
 
 	// nil
 	_, errNil := d.AddVertex(nil)
 	if errNil == nil {
-		t.Errorf("got 'nil',want nil Error")
+		t.Errorf("got 'nil',wantError nil Error")
 	}
 }
 
@@ -79,7 +88,7 @@ func TestDAG_GetVertex(t *testing.T) {
 		t.Error(errVert1)
 	}
 	if deep.Equal(v0, v1) != nil {
-		t.Errorf("got %v, want %v", v1, v0)
+		t.Errorf("got %v, wantError %v", v1, v0)
 	}
 
 	// "complex" document without key
@@ -91,7 +100,7 @@ func TestDAG_GetVertex(t *testing.T) {
 		t.Error(errVert2)
 	}
 	if deep.Equal(v2, v3) != nil {
-		t.Errorf("got %v, want %v", v3, v2)
+		t.Errorf("got %v, wantError %v", v3, v2)
 	}
 
 	// "complex" document with key
@@ -103,20 +112,20 @@ func TestDAG_GetVertex(t *testing.T) {
 		t.Error(errVert3)
 	}
 	if deep.Equal(v4, v5) != nil {
-		t.Errorf("got %v, want %v", v5, v4)
+		t.Errorf("got %v, wantError %v", v5, v4)
 	}
 
 	// unknown
 	var v idVertex
 	errUnknown := d.GetVertex("foo", v)
 	if errUnknown == nil {
-		t.Errorf("got 'nil', want document not found")
+		t.Errorf("got 'nil', wantError document not found")
 	}
 
 	// empty
 	errEmpty := d.GetVertex("", v)
 	if errEmpty == nil {
-		t.Errorf("got 'nil', want key is empty")
+		t.Errorf("got 'nil', wantError key is empty")
 	}
 }
 
@@ -128,7 +137,7 @@ func TestDAG_GetOrder(t *testing.T) {
 		t.Error(err)
 	}
 	if order != 0 {
-		t.Errorf("got %d, want %d", order, 0)
+		t.Errorf("got %d, wantError %d", order, 0)
 	}
 
 	for i := 1; i <= 10; i++ {
@@ -138,7 +147,7 @@ func TestDAG_GetOrder(t *testing.T) {
 			t.Error(err)
 		}
 		if int(order) != i {
-			t.Errorf("got %d, want %d", order, 1)
+			t.Errorf("got %d, wantError %d", order, 1)
 		}
 	}
 }
@@ -192,7 +201,7 @@ func TestDAG_GetVertices(t *testing.T) {
 			cursor, err := tt.d.GetVertices()
 			got := collector(t, cursor, err)
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("got %v, want %v", got, tt.want)
+				t.Errorf("got %v, wantError %v", got, tt.want)
 			}
 		})
 	}
@@ -226,7 +235,7 @@ func TestDAG_GetLeaves(t *testing.T) {
 			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 				_, _ = d.AddVertex(idVertex{"1"})
-				_ = d.AddEdge("0", "1")
+				_, _ = d.AddEdge("0", "1")
 			},
 			want: []string{"1"},
 		},
@@ -238,7 +247,7 @@ func TestDAG_GetLeaves(t *testing.T) {
 				for i := 1; i < 10; i++ {
 					dstKey := strconv.Itoa(i)
 					_, _ = d.AddVertex(idVertex{dstKey})
-					_ = d.AddEdge("0", dstKey)
+					_, _ = d.AddEdge("0", dstKey)
 				}
 			},
 			want: []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"},
@@ -250,7 +259,7 @@ func TestDAG_GetLeaves(t *testing.T) {
 			cursor, err := tt.d.GetLeaves()
 			got := collector(t, cursor, err)
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("got %v, want %v", got, tt.want)
+				t.Errorf("got %v, wantError %v", got, tt.want)
 			}
 		})
 	}
@@ -284,7 +293,7 @@ func TestDAG_GetRoots(t *testing.T) {
 			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 				_, _ = d.AddVertex(idVertex{"1"})
-				_ = d.AddEdge("0", "1")
+				_, _ = d.AddEdge("0", "1")
 			},
 			want: []string{"0"},
 		},
@@ -294,11 +303,11 @@ func TestDAG_GetRoots(t *testing.T) {
 			prepare: func(d *arangodag.DAG) {
 				_, _ = d.AddVertex(idVertex{"0"})
 				_, _ = d.AddVertex(idVertex{"1"})
-				_ = d.AddEdge("0", "1")
+				_, _ = d.AddEdge("0", "1")
 				for i := 2; i < 10; i++ {
 					srcKey := strconv.Itoa(i)
 					_, _ = d.AddVertex(idVertex{srcKey})
-					_ = d.AddEdge(srcKey, "1")
+					_, _ = d.AddEdge(srcKey, "1")
 				}
 			},
 			want: []string{"0", "2", "3", "4", "5", "6", "7", "8", "9"},
@@ -310,7 +319,7 @@ func TestDAG_GetRoots(t *testing.T) {
 			cursor, err := tt.d.GetRoots()
 			got := collector(t, cursor, err)
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("got %v, want %v", got, tt.want)
+				t.Errorf("got %v, wantError %v", got, tt.want)
 			}
 		})
 	}
@@ -318,78 +327,49 @@ func TestDAG_GetRoots(t *testing.T) {
 
 func TestDAG_AddEdge(t *testing.T) {
 	t.Parallel()
+	d := standardDAG(t)
 	tests := []struct {
-		d       *arangodag.DAG
 		name    string
-		prepare func(d *arangodag.DAG)
-		want    error
+		wantError     error
+		wantArangoErr bool
+		wantArangoErrNum int
 		srcKey  string
 		dstKey  string
 	}{
 		{
-			d:    someNewDag(t),
 			name: "happy path",
-			prepare: func(d *arangodag.DAG) {
-				_, _ = d.AddVertex(idVertex{"0"})
-				_, _ = d.AddVertex(idVertex{"1"})
-			},
-			want:   nil,
 			srcKey: "0",
-			dstKey: "1",
+			dstKey: "5",
 		},
 		{
-			d:    someNewDag(t),
 			name: "unknown Vertex",
-			prepare: func(d *arangodag.DAG) {
-				_, _ = d.AddVertex(idVertex{"0"})
-				_, _ = d.AddVertex(idVertex{"1"})
-			},
-			want: driver.ArangoError{
-				HasError:     true,
-				Code:         404,
-				ErrorNum:     1202,
-				ErrorMessage: "document not found",
-			},
+			wantArangoErr: true,
+			wantArangoErrNum:   1202,
 			srcKey: "0",
-			dstKey: "2",
+			dstKey: "6",
 		},
 		{
-			d:    someNewDag(t),
 			name: "duplicate edge",
-			prepare: func(d *arangodag.DAG) {
-				_, _ = d.AddVertex(idVertex{"0"})
-				_, _ = d.AddVertex(idVertex{"1"})
-				err := d.AddEdge("0", "1")
-				if err != nil {
-					t.Fatal(err)
-				}
-			},
-			want:   errors.New("duplicate edge"),
+			wantArangoErr: true,
+			wantArangoErrNum:   1210,
 			srcKey: "0",
 			dstKey: "1",
 		},
 		{
-			d:    someNewDag(t),
 			name: "loop",
-			prepare: func(d *arangodag.DAG) {
-				_, _ = d.AddVertex(idVertex{"0"})
-				_, _ = d.AddVertex(idVertex{"1"})
-				err := d.AddEdge("0", "1")
-				if err != nil {
-					t.Fatal(err)
-				}
-			},
-			want:   errors.New("loop"),
-			srcKey: "1",
-			dstKey: "0",
+			wantError: errors.New("loop"),
+			srcKey:    "1",
+			dstKey:    "0",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.prepare(tt.d)
-			got := tt.d.AddEdge(tt.srcKey, tt.dstKey)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("got %v, want %v", got, tt.want)
+			_, got := d.AddEdge(tt.srcKey, tt.dstKey)
+			if tt.wantArangoErr && !driver.IsArangoErrorWithErrorNum(got, tt.wantArangoErrNum) {
+					t.Errorf("got %v, want arango Error with Num %d", got, tt.wantArangoErrNum)
+			}
+			if tt.wantError != nil && !reflect.DeepEqual(got, tt.wantError) {
+					t.Errorf("got %v, want Error %v", got, tt.wantError)
 			}
 		})
 	}
@@ -400,56 +380,68 @@ func TestDAG_DelVertex(t *testing.T) {
 	tests := []struct {
 		d         *arangodag.DAG
 		name      string
-		prepare   func(d *arangodag.DAG)
 		wantOrder uint64
 		wantSize  uint64
 		srcKey    string
+		wantError error
+		edgeCount int64
 	}{
+		{
+			d:         someNewDag(t),
+			name:      "unknown vertex",
+			wantOrder: 0,
+			wantSize:  0,
+			srcKey:    "0",
+			wantError: documentNotFoundError,
+			edgeCount: 0,
+		},
 		{
 			d:         standardDAG(t),
 			name:      "two edges",
-			prepare:   func(d *arangodag.DAG) {},
 			wantOrder: 5,
 			wantSize:  4,
 			srcKey:    "0",
+			edgeCount: 2,
 		},
 		{
 			d:         standardDAG(t),
 			name:      "no edges",
-			prepare:   func(d *arangodag.DAG) {},
 			wantOrder: 5,
 			wantSize:  6,
 			srcKey:    "5",
+			edgeCount: 0,
 		},
 		{
 			d:         standardDAG(t),
 			name:      "in between",
-			prepare:   func(d *arangodag.DAG) {},
 			wantOrder: 5,
 			wantSize:  4,
 			srcKey:    "2",
+			edgeCount: 2,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.prepare(tt.d)
-			err := tt.d.DelVertex(tt.srcKey)
-			if err != nil {
-				t.Error(err)
+			edgeCount, err := tt.d.DelVertex(tt.srcKey)
+			if err != tt.wantError {
+				t.Fatalf("got %v, wantError %v", err, tt.wantError)
+			}
+			if edgeCount != tt.edgeCount {
+				t.Errorf("got %v, wantError %v", edgeCount, tt.edgeCount)
 			}
 			gotOrder, errOrder := tt.d.GetOrder()
 			if errOrder != nil {
 				t.Error(errOrder)
 			}
 			if gotOrder != tt.wantOrder {
-				t.Errorf("got %v, want %v", gotOrder, tt.wantOrder)
+				t.Errorf("got %v, wantError %v", gotOrder, tt.wantOrder)
 			}
 			gotSize, errSize := tt.d.GetSize()
 			if errSize != nil {
 				t.Error(errSize)
 			}
 			if gotSize != tt.wantSize {
-				t.Errorf("got %v, want %v", gotSize, tt.wantSize)
+				t.Errorf("got %v, wantError %v", gotSize, tt.wantSize)
 			}
 		})
 	}
@@ -457,33 +449,56 @@ func TestDAG_DelVertex(t *testing.T) {
 
 func TestDAG_EdgeExists(t *testing.T) {
 	t.Parallel()
-	d := someNewDag(t)
-	k1, _ := d.AddVertex(idVertex{"0"})
-	k2, _ := d.AddVertex(idVertex{"1"})
+	d := standardDAG(t)
+	tests := []struct {
+		name   string
+		want   bool
+		srcKey string
+		dstKey string
+	}{
+		{
+			name:   "src does not exist",
+			want:   false,
+			srcKey: "6",
+			dstKey: "0",
+		},
+		{
+			name:   "dst does not exist",
+			want:   false,
+			srcKey: "0",
+			dstKey: "6",
+		},
+		{
+			name:   "neither src nor dest exist",
+			want:   false,
+			srcKey: "7",
+			dstKey: "6",
+		},
+		{
+			name:   "edge does not exist",
+			want:   false,
+			srcKey: "0",
+			dstKey: "5",
+		},
+		{
+			name:   "edge exists",
+			want:   true,
+			srcKey: "0",
+			dstKey: "1",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := d.EdgeExists(tt.srcKey, tt.dstKey)
+			if err != nil {
+				t.Error(err)
+			}
+			if got != tt.want {
+				t.Errorf("got %v, wantError %v", got, tt.want)
+			}
+		})
+	}
 
-	// before adding the edge
-	isEdge, errIsEdge := d.EdgeExists(k1, k2)
-	if errIsEdge != nil {
-		t.Error(errIsEdge)
-	}
-	if isEdge {
-		t.Errorf("EdgeExists() = %t, want %t", isEdge, false)
-	}
-
-	// adding edge
-	errAddEdge := d.AddEdge(k1, k2)
-	if errAddEdge != nil {
-		t.Error(errAddEdge)
-	}
-
-	// after adding edge
-	isEdge2, errIsEdge2 := d.EdgeExists(k1, k2)
-	if errIsEdge2 != nil {
-		t.Error(errIsEdge2)
-	}
-	if !isEdge2 {
-		t.Errorf("EdgeExists() = %t, want %t", isEdge2, true)
-	}
 }
 
 func TestDAG_GetSize(t *testing.T) {
@@ -494,19 +509,19 @@ func TestDAG_GetSize(t *testing.T) {
 		t.Error(err)
 	}
 	if got != 0 {
-		t.Errorf("got %d, want %d", got, 0)
+		t.Errorf("got %d, wantError %d", got, 0)
 	}
 
 	for i := 1; i <= 9; i++ {
 		id1, _ := d.AddVertex(idVertex{strconv.Itoa(i * 10)})
 		id2, _ := d.AddVertex(idVertex{strconv.Itoa(i*10 + 1)})
-		_ = d.AddEdge(id1, id2)
+		_, _ = d.AddEdge(id1, id2)
 		got, err = d.GetSize()
 		if err != nil {
 			t.Error(err)
 		}
 		if int(got) != i {
-			t.Errorf("got %d, want %d", got, 1)
+			t.Errorf("got %d, wantError %d", got, 1)
 		}
 	}
 }
@@ -553,7 +568,7 @@ func TestDAG_GetShortestPath(t *testing.T) {
 				t.Error(err)
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("got %v, want %v", got, tt.want)
+				t.Errorf("got %v, wantError %v", got, tt.want)
 			}
 		})
 	}
@@ -591,7 +606,7 @@ func TestDAG_GetParents(t *testing.T) {
 				t.Error(err)
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("got %v, want %v", got, tt.want)
+				t.Errorf("got %v, wantError %v", got, tt.want)
 			}
 		})
 	}
@@ -651,7 +666,7 @@ func TestDAG_GetAncestors(t *testing.T) {
 				t.Error(err)
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("got %v, want %v", got, tt.want)
+				t.Errorf("got %v, wantError %v", got, tt.want)
 			}
 		})
 	}
@@ -689,7 +704,7 @@ func TestDAG_GetChildren(t *testing.T) {
 				t.Error(err)
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("got %v, want %v", got, tt.want)
+				t.Errorf("got %v, wantError %v", got, tt.want)
 			}
 		})
 	}
@@ -749,7 +764,7 @@ func TestDAG_GetDescendants(t *testing.T) {
 				t.Error(err)
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("got %v, want %v", got, tt.want)
+				t.Errorf("got %v, wantError %v", got, tt.want)
 			}
 		})
 	}
@@ -764,7 +779,7 @@ func TestDAG_String(t *testing.T) {
 	}
 	want := standardDot
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got %v, want %v", got, want)
+		t.Errorf("got %v, wantError %v", got, want)
 	}
 }
 
@@ -881,11 +896,11 @@ func standardDAG(t *testing.T) *arangodag.DAG {
 	_, _ = d.AddVertex(idVertex{"3"})
 	_, _ = d.AddVertex(idVertex{"4"})
 	_, _ = d.AddVertex(idVertex{"5"})
-	_ = d.AddEdge("0", "1")
-	_ = d.AddEdge("1", "2")
-	_ = d.AddEdge("1", "4")
-	_ = d.AddEdge("2", "3")
-	_ = d.AddEdge("3", "4")
-	_ = d.AddEdge("0", "3")
+	_, _ = d.AddEdge("0", "1")
+	_, _ = d.AddEdge("1", "2")
+	_, _ = d.AddEdge("1", "4")
+	_, _ = d.AddEdge("2", "3")
+	_, _ = d.AddEdge("3", "4")
+	_, _ = d.AddEdge("0", "3")
 	return d
 }
