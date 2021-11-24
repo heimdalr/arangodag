@@ -64,7 +64,9 @@ func NewDAG(dbName, vertexCollName, edgeCollName string, client driver.Client) (
 		collectionOptions := &driver.CreateCollectionOptions{
 			Type: driver.CollectionTypeEdge,
 		}
-		edges, err = db.CreateCollection(context.Background(), edgeCollName, collectionOptions)
+		if edges, err = db.CreateCollection(context.Background(), edgeCollName, collectionOptions); err != nil {
+			return
+		}
 
 		// ensure unique edges (from->to) (see: https://stackoverflow.com/a/43006762)
 		if _, _, err = edges.EnsureHashIndex(
