@@ -30,8 +30,8 @@ func Example() {
 	key2, _ := d.AddVertex(struct{ num int }{42})
 
 	// add some edges
-	_ = d.AddEdge(key0, key1)
-	_ = d.AddEdge(key0, key2)
+	_, _ = d.AddEdge(key0, key1)
+	_, _ = d.AddEdge(key0, key2)
 
 	// get size
 	order, _ := d.GetOrder()

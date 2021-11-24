@@ -32,7 +32,7 @@ func ExampleDAG_GetChildren() {
 	for i := 1; i < 10; i++ {
 		dstKey := strconv.Itoa(i)
 		_, _ = d.AddVertex(idVertex{dstKey})
-		_ = d.AddEdge("0", dstKey)
+		_, _ = d.AddEdge("0", dstKey)
 	}
 
 	// get order and size
