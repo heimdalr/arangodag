@@ -721,8 +721,6 @@ func collector(t *testing.T, cursor driver.Cursor, errFn error) []string {
 	return collect
 }
 
-
-
 func someNewDag(t *testing.T) *arangodag.DAG {
 
 	// get arangoDB host and port from environment

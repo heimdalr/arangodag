@@ -37,7 +37,6 @@ func TestDAG_dump(t *testing.T) {
 	}
 }
 
-
 func standardDAG(t *testing.T) *arangodag.DAG {
 
 	/*

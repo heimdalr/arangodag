@@ -241,7 +241,6 @@ func (d *DAG) GetEdges() (driver.Cursor, error) {
 	return d.db.Query(ctx, query, bindVars)
 }
 
-
 // GetShortestPath executes the query to retrieve the vertices on the shortest
 // path between the vertex with the key srcKey and the vertex with the key
 // dstKey. GetShortestPath returns a cursor that may be used retrieve the
