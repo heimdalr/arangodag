@@ -380,8 +380,8 @@ func TestDAG_DelVertex(t *testing.T) {
 	tests := []struct {
 		d         *arangodag.DAG
 		name      string
-		wantOrder uint64
-		wantSize  uint64
+		wantOrder int64
+		wantSize  int64
 		srcKey    string
 		wantError error
 		edgeCount int64

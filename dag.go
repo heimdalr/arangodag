@@ -88,24 +88,20 @@ func NewDAG(dbName, vertexCollName, edgeCollName string, client driver.Client) (
 // key will be created otherwise.
 //
 // AddVertex prevents duplicate keys.
-func (d *DAG) AddVertex(vertex interface{}) (string, error) {
-
+func (d *DAG) AddVertex(vertex interface{}) (key string, err error) {
+	var meta driver.DocumentMeta
 	ctx := driver.WithQueryCount(context.Background())
-	meta, err := d.vertices.CreateDocument(ctx, vertex)
-	if err != nil {
-		return "", err
+	if meta, err = d.vertices.CreateDocument(ctx, vertex); err != nil {
+		return
 	}
-	return meta.Key, nil
+	return meta.Key, err
 }
 
 // GetVertex returns the vertex with the given key.
-func (d *DAG) GetVertex(key string, vertex interface{}) error {
+func (d *DAG) GetVertex(key string, vertex interface{}) (err error) {
 	ctx := context.Background()
-	_, err := d.vertices.ReadDocument(ctx, key, vertex)
-	if err != nil {
-		return err
-	}
-	return nil
+	_, err = d.vertices.ReadDocument(ctx, key, vertex)
+	return
 }
 
 // DelVertex removes the vertex with the given key. DelVertex also removes any
@@ -139,12 +135,9 @@ func (d *DAG) DelVertex(key string) (edgeCount int64, err error) {
 }
 
 // GetOrder returns the number of vertices in the graph.
-func (d *DAG) GetOrder() (uint64, error) {
-	count, err := d.vertices.Count(context.Background())
-	if err != nil {
-		return 0, err
-	}
-	return uint64(count), nil
+func (d *DAG) GetOrder() (count int64, err error) {
+	return d.vertices.Count(context.Background())
+
 }
 
 // GetVertices executes the query to retrieve all vertices of the DAG.
@@ -244,12 +237,8 @@ func (d *DAG) EdgeExists(srcKey, dstKey string) (bool, error) {
 }
 
 // GetSize returns the number of edges in the DAG.
-func (d *DAG) GetSize() (uint64, error) {
-	count, err := d.edges.Count(context.Background())
-	if err != nil {
-		return 0, err
-	}
-	return uint64(count), nil
+func (d *DAG) GetSize() (int64, error) {
+	return d.edges.Count(context.Background())
 }
 
 // GetEdges executes the query to retrieve all edges of the DAG.
