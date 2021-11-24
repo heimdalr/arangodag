@@ -20,11 +20,6 @@ type DAG struct {
 	client   driver.Client
 }
 
-type myEdge struct {
-	From string `json:"_from"`
-	To   string `json:"_to"`
-}
-
 // NewDAG creates / initializes a new DAG.
 func NewDAG(dbName, vertexCollName, edgeCollName string, client driver.Client) (*DAG, error) {
 
@@ -198,7 +193,11 @@ func (d *DAG) AddEdge(srcKey, dstKey string) error {
 
 	// add edge
 	ctx := context.Background()
-	_, err := d.edges.CreateDocument(ctx, myEdge{srcId, dstId})
+	edge := struct {
+		From string `json:"_from"`
+		To   string `json:"_to"`
+	}{srcId, dstId}
+	_, err := d.edges.CreateDocument(ctx, edge)
 	if err != nil {
 		return err
 	}
