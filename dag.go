@@ -228,6 +228,21 @@ func (d *DAG) GetSize() (uint64, error) {
 	return uint64(count), nil
 }
 
+// GetEdges executes the query to retrieve all edges of the DAG.
+// GetEdges returns a cursor that may be used retrieve the edges
+// one-by-one.
+//
+// It is up to the caller to close the cursor, if no longer needed.
+func (d *DAG) GetEdges() (driver.Cursor, error) {
+	query := "FOR v IN @@vertexCollection RETURN v"
+	bindVars := map[string]interface{}{
+		"@vertexCollection": d.edges.Name(),
+	}
+	ctx := context.Background()
+	return d.db.Query(ctx, query, bindVars)
+}
+
+
 // GetShortestPath executes the query to retrieve the vertices on the shortest
 // path between the vertex with the key srcKey and the vertex with the key
 // dstKey. GetShortestPath returns a cursor that may be used retrieve the
