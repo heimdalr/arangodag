@@ -11,6 +11,20 @@ on:
 jobs:
   Coverage:
     runs-on: ubuntu-latest
+
+    services:
+      arangodb:
+        image: arangodb
+        ports:
+          - 8529:8529
+        env:
+          ARANGO_NO_AUTH: 1
+        options: >-
+          --health-cmd "wget localhost:8529/_api/version -O - >/dev/null 2>&1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Install Go
         if: success()
@@ -22,6 +36,9 @@ jobs:
       - name: Calc coverage
         run: |
           go test -v -covermode=count -coverprofile=coverage.out
+        env:
+          ARANGODB_HOST: localhost
+          ARANGODB_PORT: ${{ job.services.arangodb.ports[8529] }}
       - name: Convert coverage.out to coverage.lcov
         uses: jandelgado/gcov2lcov-action@v1.0.6
       - name: Coveralls
