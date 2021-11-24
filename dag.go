@@ -485,10 +485,6 @@ func (d *DAG) getParentCount(id driver.DocumentID) (uint64, error) {
 	return uint64(cursor.Count()), nil
 }
 
-func (d *DAG) DeleteVertex(key string) error {
-	panic("implement me")
-}
-
 func (d *DAG) DeleteEdge(srcKey, dstKey string) error {
 	panic("implement me")
 }
