@@ -721,35 +721,7 @@ func collector(t *testing.T, cursor driver.Cursor, errFn error) []string {
 	return collect
 }
 
-func standardDAG(t *testing.T) *arangodag.DAG {
 
-	/*
-	     0   5
-	    /|
-	   | 1
-	   | |\
-	   | 2 |
-	    \| |
-	     3 |
-	     |/
-	     4
-	*/
-
-	d := someNewDag(t)
-	_, _ = d.AddVertex(idVertex{"0"})
-	_, _ = d.AddVertex(idVertex{"1"})
-	_, _ = d.AddVertex(idVertex{"2"})
-	_, _ = d.AddVertex(idVertex{"3"})
-	_, _ = d.AddVertex(idVertex{"4"})
-	_, _ = d.AddVertex(idVertex{"5"})
-	_ = d.AddEdge("0", "1")
-	_ = d.AddEdge("1", "2")
-	_ = d.AddEdge("1", "4")
-	_ = d.AddEdge("2", "3")
-	_ = d.AddEdge("3", "4")
-	_ = d.AddEdge("0", "3")
-	return d
-}
 
 func someNewDag(t *testing.T) *arangodag.DAG {
 
