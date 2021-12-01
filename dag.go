@@ -406,7 +406,8 @@ func (d *DAG) String() (result string, err error) {
 		if errRead != nil {
 			return "", errRead
 		}
-		keyNodes[vertex.ID.String()] = g.Node(vertex.Key)
+		node := g.Node(vertex.Key).Label(vertex.Key)
+		keyNodes[vertex.ID.String()] = node
 	}
 
 	// read all vertices
