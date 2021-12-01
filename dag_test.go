@@ -50,7 +50,7 @@ func TestDAG_AddVertex(t *testing.T) {
 		t.Error(errAdd1)
 	}
 	if autoID == "" {
-		t.Errorf("got: %v, wantError id", autoID)
+		t.Errorf("got: %v, want id", autoID)
 	}
 
 	// vertex with id
@@ -60,19 +60,19 @@ func TestDAG_AddVertex(t *testing.T) {
 		t.Error(errAdd2)
 	}
 	if idReturned != id {
-		t.Errorf("got '%s', wantError %s", idReturned, id)
+		t.Errorf("got '%s', want %s", idReturned, id)
 	}
 
 	// duplicate
 	_, errDuplicate := d.AddVertex(idVertex{Key: "1"})
 	if errDuplicate == nil {
-		t.Errorf("got 'nil', wantError duplicate Error")
+		t.Errorf("got 'nil', want duplicate Error")
 	}
 
 	// nil
 	_, errNil := d.AddVertex(nil)
 	if errNil == nil {
-		t.Errorf("got 'nil',wantError nil Error")
+		t.Errorf("got 'nil',want nil Error")
 	}
 }
 
@@ -88,7 +88,7 @@ func TestDAG_GetVertex(t *testing.T) {
 		t.Error(errVert1)
 	}
 	if deep.Equal(v0, v1) != nil {
-		t.Errorf("got %v, wantError %v", v1, v0)
+		t.Errorf("got %v, want %v", v1, v0)
 	}
 
 	// "complex" document without key
@@ -100,7 +100,7 @@ func TestDAG_GetVertex(t *testing.T) {
 		t.Error(errVert2)
 	}
 	if deep.Equal(v2, v3) != nil {
-		t.Errorf("got %v, wantError %v", v3, v2)
+		t.Errorf("got %v, want %v", v3, v2)
 	}
 
 	// "complex" document with key
@@ -112,20 +112,20 @@ func TestDAG_GetVertex(t *testing.T) {
 		t.Error(errVert3)
 	}
 	if deep.Equal(v4, v5) != nil {
-		t.Errorf("got %v, wantError %v", v5, v4)
+		t.Errorf("got %v, want %v", v5, v4)
 	}
 
 	// unknown
 	var v idVertex
 	errUnknown := d.GetVertex("foo", v)
 	if errUnknown == nil {
-		t.Errorf("got 'nil', wantError document not found")
+		t.Errorf("got 'nil', want document not found")
 	}
 
 	// empty
 	errEmpty := d.GetVertex("", v)
 	if errEmpty == nil {
-		t.Errorf("got 'nil', wantError key is empty")
+		t.Errorf("got 'nil', want key is empty")
 	}
 }
 
@@ -137,7 +137,7 @@ func TestDAG_GetOrder(t *testing.T) {
 		t.Error(err)
 	}
 	if order != 0 {
-		t.Errorf("got %d, wantError %d", order, 0)
+		t.Errorf("got %d, want %d", order, 0)
 	}
 
 	for i := 1; i <= 10; i++ {
@@ -147,7 +147,7 @@ func TestDAG_GetOrder(t *testing.T) {
 			t.Error(err)
 		}
 		if int(order) != i {
-			t.Errorf("got %d, wantError %d", order, 1)
+			t.Errorf("got %d, want %d", order, 1)
 		}
 	}
 }
@@ -201,7 +201,7 @@ func TestDAG_GetVertices(t *testing.T) {
 			cursor, err := tt.d.GetVertices()
 			got := collector(t, cursor, err)
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("got %v, wantError %v", got, tt.want)
+				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -259,7 +259,7 @@ func TestDAG_GetLeaves(t *testing.T) {
 			cursor, err := tt.d.GetLeaves()
 			got := collector(t, cursor, err)
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("got %v, wantError %v", got, tt.want)
+				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -319,7 +319,7 @@ func TestDAG_GetRoots(t *testing.T) {
 			cursor, err := tt.d.GetRoots()
 			got := collector(t, cursor, err)
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("got %v, wantError %v", got, tt.want)
+				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -342,7 +342,14 @@ func TestDAG_AddEdge(t *testing.T) {
 			dstKey: "5",
 		},
 		{
-			name:             "unknown Vertex",
+			name:             "src doesn't exist",
+			wantArangoErr:    true,
+			wantArangoErrNum: 1202,
+			srcKey:           "8",
+			dstKey:           "1",
+		},
+		{
+			name:             "dst doesn't exist",
 			wantArangoErr:    true,
 			wantArangoErrNum: 1202,
 			srcKey:           "0",
@@ -424,24 +431,24 @@ func TestDAG_DelVertex(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			edgeCount, err := tt.d.DelVertex(tt.srcKey)
 			if err != tt.wantError {
-				t.Fatalf("got %v, wantError %v", err, tt.wantError)
+				t.Fatalf("got %v, want %v", err, tt.wantError)
 			}
 			if edgeCount != tt.edgeCount {
-				t.Errorf("got %v, wantError %v", edgeCount, tt.edgeCount)
+				t.Errorf("got %v, want %v", edgeCount, tt.edgeCount)
 			}
 			gotOrder, errOrder := tt.d.GetOrder()
 			if errOrder != nil {
 				t.Error(errOrder)
 			}
 			if gotOrder != tt.wantOrder {
-				t.Errorf("got %v, wantError %v", gotOrder, tt.wantOrder)
+				t.Errorf("got %v, want %v", gotOrder, tt.wantOrder)
 			}
 			gotSize, errSize := tt.d.GetSize()
 			if errSize != nil {
 				t.Error(errSize)
 			}
 			if gotSize != tt.wantSize {
-				t.Errorf("got %v, wantError %v", gotSize, tt.wantSize)
+				t.Errorf("got %v, want %v", gotSize, tt.wantSize)
 			}
 		})
 	}
@@ -494,7 +501,7 @@ func TestDAG_EdgeExists(t *testing.T) {
 				t.Error(err)
 			}
 			if got != tt.want {
-				t.Errorf("got %v, wantError %v", got, tt.want)
+				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -509,7 +516,7 @@ func TestDAG_GetSize(t *testing.T) {
 		t.Error(err)
 	}
 	if got != 0 {
-		t.Errorf("got %d, wantError %d", got, 0)
+		t.Errorf("got %d, want %d", got, 0)
 	}
 
 	for i := 1; i <= 9; i++ {
@@ -521,7 +528,7 @@ func TestDAG_GetSize(t *testing.T) {
 			t.Error(err)
 		}
 		if int(got) != i {
-			t.Errorf("got %d, wantError %d", got, 1)
+			t.Errorf("got %d, want %d", got, 1)
 		}
 	}
 }
@@ -559,16 +566,34 @@ func TestDAG_GetShortestPath(t *testing.T) {
 			srcKey: "0",
 			dstKey: "4",
 		},
+		{
+			name:   "src and dst are equal",
+			want:   []string{"1"},
+			srcKey: "1",
+			dstKey: "1",
+		},
+		{
+			name:   "dst doesn't exist",
+			want:   nil,
+			srcKey: "0",
+			dstKey: "8",
+		},
+		{
+			name:   "happy path",
+			want:   []string{"2", "3", "4"},
+			srcKey: "2",
+			dstKey: "4",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cursor, err := d.GetShortestPath(tt.srcKey, tt.dstKey)
-			got := collector(t, cursor, err)
 			if err != nil {
 				t.Error(err)
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("got %v, wantError %v", got, tt.want)
+			got := collector(t, cursor, err)
+			if err == nil && !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -584,6 +609,11 @@ func TestDAG_GetParents(t *testing.T) {
 	}{
 		{
 			name:   "no parents",
+			want:   nil,
+			srcKey: "0",
+		},
+		{
+			name:   "src doesn't exist",
 			want:   nil,
 			srcKey: "0",
 		},
@@ -606,7 +636,49 @@ func TestDAG_GetParents(t *testing.T) {
 				t.Error(err)
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("got %v, wantError %v", got, tt.want)
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDAG_GetParentCount(t *testing.T) {
+	t.Parallel()
+	d := standardDAG(t)
+	tests := []struct {
+		name   string
+		want   int64
+		srcKey string
+	}{
+		{
+			name:   "src doesn't exist",
+			want:   0,
+			srcKey: "8",
+		},
+		{
+			name:   "no parents",
+			want:   0,
+			srcKey: "0",
+		},
+		{
+			name:   "one parent",
+			want:   1,
+			srcKey: "2",
+		},
+		{
+			name:   "two parents",
+			want:   2,
+			srcKey: "3",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := d.GetParentCount(tt.srcKey)
+			if err != nil {
+				t.Error(err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -621,6 +693,12 @@ func TestDAG_GetAncestors(t *testing.T) {
 		srcKey string
 		dfs    bool
 	}{
+		{
+			name:   "src doesn't exist",
+			want:   nil,
+			srcKey: "8",
+			dfs:    false,
+		},
 		{
 			name:   "no ancestors",
 			want:   nil,
@@ -666,7 +744,7 @@ func TestDAG_GetAncestors(t *testing.T) {
 				t.Error(err)
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("got %v, wantError %v", got, tt.want)
+				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -680,6 +758,11 @@ func TestDAG_GetChildren(t *testing.T) {
 		want   []string
 		srcKey string
 	}{
+		{
+			name:   "src doesn't exist",
+			want:   nil,
+			srcKey: "8",
+		},
 		{
 			name:   "no children",
 			want:   nil,
@@ -704,7 +787,49 @@ func TestDAG_GetChildren(t *testing.T) {
 				t.Error(err)
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("got %v, wantError %v", got, tt.want)
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDAG_GetChildCount(t *testing.T) {
+	t.Parallel()
+	d := standardDAG(t)
+	tests := []struct {
+		name   string
+		want   int64
+		srcKey string
+	}{
+		{
+			name:   "src doesn't exist",
+			want:   0,
+			srcKey: "8",
+		},
+		{
+			name:   "no children",
+			want:   0,
+			srcKey: "4",
+		},
+		{
+			name:   "one child",
+			want:   1,
+			srcKey: "3",
+		},
+		{
+			name:   "two children",
+			want:   2,
+			srcKey: "1",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := d.GetChildCount(tt.srcKey)
+			if err != nil {
+				t.Error(err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -719,6 +844,11 @@ func TestDAG_GetDescendants(t *testing.T) {
 		srcKey string
 		dfs    bool
 	}{
+		{
+			name:   "src doesn't exist",
+			want:   nil,
+			srcKey: "8",
+		},
 		{
 			name:   "no descendants",
 			want:   nil,
@@ -764,7 +894,7 @@ func TestDAG_GetDescendants(t *testing.T) {
 				t.Error(err)
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("got %v, wantError %v", got, tt.want)
+				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -779,7 +909,7 @@ func TestDAG_String(t *testing.T) {
 	}
 	want := standardDot
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got %v, wantError %v", got, want)
+		t.Errorf("got %v, want %v", got, want)
 	}
 }
 
