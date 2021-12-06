@@ -206,15 +206,14 @@ func (d *DAG) GetRoots() (driver.Cursor, error) {
 func (d *DAG) AddEdge(srcKey, dstKey string) (key string, err error) {
 
 	// ensure vertices exist
-	var srcID, dstID string
-	if srcID, err = d.getVertexID(srcKey); err != nil {
+	var src, dst driver.DocumentMeta
+	if err = d.GetVertex(srcKey, &src); err != nil {
 		return
 	}
-	if dstID, err = d.getVertexID(dstKey); err != nil {
+	if err = d.GetVertex(dstKey, &dst); err != nil {
 		return
 	}
-
-	return d.addEdge(srcID, dstID)
+	return d.addEdge(src.ID.String(), dst.ID.String())
 }
 
 // AddEdgeUnchecked adds an edge from the vertex with the key srcKey (src) to the vertex with
@@ -495,16 +494,6 @@ func (d *DAG) getRelatives(srcKey string, outbound bool, depth int, dfs bool) (d
 
 	ctx := context.Background()
 	return d.db.Query(ctx, query, bindVars)
-}
-
-func (d *DAG) getVertexID(key string) (string, error) {
-	ctx := context.Background()
-	var data driver.DocumentMeta
-	meta, err := d.vertices.ReadDocument(ctx, key, &data)
-	if err != nil {
-		return "", err
-	}
-	return string(meta.ID), nil
 }
 
 func (d *DAG) edgeExists(srcID, dstID string) (bool, error) {
