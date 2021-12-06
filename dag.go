@@ -396,10 +396,10 @@ func (d *DAG) GetDescendants(srcKey string, dfs bool) (driver.Cursor, error) {
 }
 
 // DotGraph returns a (dot-) graph of the DAG.
-func (d *DAG) DotGraph(g *dot.Graph) (err error) {
+func (d *DAG) DotGraph(g *dot.Graph) (nodeMapping map[string]dot.Node, err error) {
 
 	// mapping between arangoDB-vertex keys and dot nodes
-	keyNodes := make(map[string]dot.Node)
+	nodeMapping = make(map[string]dot.Node)
 
 	var cursor driver.Cursor
 
@@ -419,7 +419,7 @@ func (d *DAG) DotGraph(g *dot.Graph) (err error) {
 			return
 		}
 		node := g.Node(vertex.Key).Label(vertex.Key)
-		keyNodes[vertex.ID.String()] = node
+		nodeMapping[vertex.ID.String()] = node
 	}
 	if err = cursor.Close(); err != nil {
 		return
@@ -442,7 +442,7 @@ func (d *DAG) DotGraph(g *dot.Graph) (err error) {
 			err = errRead
 			return
 		}
-		g.Edge(keyNodes[edge.From], keyNodes[edge.To])
+		g.Edge(nodeMapping[edge.From], nodeMapping[edge.To])
 	}
 	if err = cursor.Close(); err != nil {
 		return
@@ -455,7 +455,7 @@ func (d *DAG) String() (result string, err error) {
 
 	// transform to dot graph
 	g := dot.NewGraph(dot.Directed)
-	if err = d.DotGraph(g); err != nil {
+	if _, err = d.DotGraph(g); err != nil {
 		return
 	}
 
