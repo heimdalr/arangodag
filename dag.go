@@ -397,67 +397,79 @@ func (d *DAG) GetDescendants(srcKey string, dfs bool) (driver.Cursor, error) {
 	return d.getRelatives(srcKey, true, maxDepth, dfs)
 }
 
-// String returns a (graphviz) dot representation of the DAG.
-func (d *DAG) String() (result string, err error) {
+// DotGraph returns a (dot-) graph of the DAG.
+func (d *DAG) DotGraph(options ...dot.GraphOption) (g *dot.Graph, err error) {
 
 	// initialize dot graph
-	g := dot.NewGraph(dot.Directed)
+	g = dot.NewGraph()
+	for _, each := range options {
+		each.Apply(g)
+	}
 
 	// mapping between arangoDB-vertex keys and dot nodes
 	keyNodes := make(map[string]dot.Node)
 
+	var cursor driver.Cursor
+
 	// read all vertices
-	cursorVert, errVert := d.GetVertices()
-	if errVert != nil {
-		return "", errVert
+	if cursor, err = d.GetVertices(); err != nil {
+		return
 	}
-	defer func() {
-		errCursor := cursorVert.Close()
-		if errCursor != nil {
-			err = errCursor
-		}
-	}()
 	ctx := context.Background()
 	var vertex driver.DocumentMeta
 	for {
-		_, errRead := cursorVert.ReadDocument(ctx, &vertex)
+		_, errRead := cursor.ReadDocument(ctx, &vertex)
 		if driver.IsNoMoreDocuments(errRead) {
 			break
 		}
 		if errRead != nil {
-			return "", errRead
+			err = errRead
+			return
 		}
 		node := g.Node(vertex.Key).Label(vertex.Key)
 		keyNodes[vertex.ID.String()] = node
 	}
+	if err = cursor.Close(); err != nil {
+		return
+	}
 
 	// read all vertices
-	cursorEdges, errEdges := d.GetEdges()
-	if errEdges != nil {
-		return "", errEdges
+	if cursor, err = d.GetEdges(); err != nil {
+		return
 	}
-	defer func() {
-		errCursor := cursorEdges.Close()
-		if errCursor != nil {
-			err = errCursor
-		}
-	}()
 	var edge struct {
 		From string `json:"_from"`
 		To   string `json:"_to"`
 	}
 	for {
-		_, errRead := cursorEdges.ReadDocument(ctx, &edge)
+		_, errRead := cursor.ReadDocument(ctx, &edge)
 		if driver.IsNoMoreDocuments(errRead) {
 			break
 		}
 		if errRead != nil {
-			return "", errRead
+			err = errRead
+			return
 		}
 		g.Edge(keyNodes[edge.From], keyNodes[edge.To])
 	}
+	if err = cursor.Close(); err != nil {
+		return
+	}
+	return
+}
 
-	return g.String(), nil
+// String returns a (graphviz) dot representation of the DAG.
+func (d *DAG) String() (result string, err error) {
+
+	// transform to dot graph
+	var g *dot.Graph
+	if g, err = d.DotGraph(dot.Directed); err != nil {
+		return
+	}
+
+	// get the dot string
+	result = g.String()
+	return
 }
 
 func (d *DAG) getRelatives(srcKey string, outbound bool, depth int, dfs bool) (driver.Cursor, error) {
