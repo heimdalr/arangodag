@@ -18,7 +18,6 @@ type DAG struct {
 	db       driver.Database
 	vertices driver.Collection
 	edges    driver.Collection
-	client   driver.Client
 }
 
 // NewDAG creates / initializes a new DAG.
@@ -83,7 +82,7 @@ func NewDAG(dbName, collectionName string, client driver.Client) (d *DAG, err er
 		return
 	}
 
-	return &DAG{db: db, vertices: vertices, edges: edges, client: client}, nil
+	return &DAG{db: db, vertices: vertices, edges: edges}, nil
 }
 
 // AddVertex adds the given vertex to the DAG and returns its key.
@@ -398,13 +397,7 @@ func (d *DAG) GetDescendants(srcKey string, dfs bool) (driver.Cursor, error) {
 }
 
 // DotGraph returns a (dot-) graph of the DAG.
-func (d *DAG) DotGraph(options ...dot.GraphOption) (g *dot.Graph, err error) {
-
-	// initialize dot graph
-	g = dot.NewGraph()
-	for _, each := range options {
-		each.Apply(g)
-	}
+func (d *DAG) DotGraph(g *dot.Graph) (err error) {
 
 	// mapping between arangoDB-vertex keys and dot nodes
 	keyNodes := make(map[string]dot.Node)
@@ -462,8 +455,8 @@ func (d *DAG) DotGraph(options ...dot.GraphOption) (g *dot.Graph, err error) {
 func (d *DAG) String() (result string, err error) {
 
 	// transform to dot graph
-	var g *dot.Graph
-	if g, err = d.DotGraph(dot.Directed); err != nil {
+	g := dot.NewGraph(dot.Directed)
+	if err = d.DotGraph(g); err != nil {
 		return
 	}
 
