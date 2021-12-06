@@ -20,7 +20,7 @@ func ExampleDAG_GetChildren() {
 
 	// connect to DAG (create a new one if necessary)
 	uid := strconv.FormatInt(time.Now().UnixNano(), 10)
-	d, _ := arangodag.NewDAG("test-"+uid, "vertices-"+uid, "edges-"+uid, client)
+	d, _ := arangodag.NewDAG("test-"+uid, uid, client)
 
 	// vertex type with self selected key
 	type idVertex struct {

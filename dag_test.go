@@ -985,20 +985,13 @@ func someNewDag(t *testing.T) *arangodag.DAG {
 		t.Fatalf("failed to setup client: %v", err)
 	}
 
-	dbName := someName()
-	vertexCollName := someName()
-	edgeCollName := someName()
+	uid := strconv.FormatInt(time.Now().UnixNano(), 10)
 
-	d, err := arangodag.NewDAG(dbName, vertexCollName, edgeCollName, client)
+	d, err := arangodag.NewDAG("test-"+uid, uid, client)
 	if err != nil {
 		t.Fatalf("failed to setup new dag: %v", err)
 	}
 	return d
-}
-
-func someName() string {
-	//return fmt.Sprintf("test_%s", uuid.New().String())
-	return fmt.Sprintf("test_%d", time.Now().UnixNano())
 }
 
 type idVertex struct {

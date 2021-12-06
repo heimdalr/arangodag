@@ -22,7 +22,7 @@ type DAG struct {
 }
 
 // NewDAG creates / initializes a new DAG.
-func NewDAG(dbName, vertexCollName, edgeCollName string, client driver.Client) (d *DAG, err error) {
+func NewDAG(dbName, collectionName string, client driver.Client) (d *DAG, err error) {
 
 	// use or create database
 	var db driver.Database
@@ -41,6 +41,7 @@ func NewDAG(dbName, vertexCollName, edgeCollName string, client driver.Client) (
 
 	// use or create vertex collection
 	var vertices driver.Collection
+	vertexCollName := fmt.Sprintf("%s-%s", "v", collectionName)
 	if exists, err = db.CollectionExists(context.Background(), vertexCollName); err != nil {
 		return
 	}
@@ -55,6 +56,7 @@ func NewDAG(dbName, vertexCollName, edgeCollName string, client driver.Client) (
 
 	// use or create edge collection
 	var edges driver.Collection
+	edgeCollName := fmt.Sprintf("%s-%s", "e", collectionName)
 	if exists, err = db.CollectionExists(context.Background(), edgeCollName); err != nil {
 		return
 	}
