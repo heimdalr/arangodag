@@ -213,6 +213,25 @@ func (d *DAG) AddEdge(srcKey, dstKey string) (key string, err error) {
 		return
 	}
 
+	return d.addEdge(srcID, dstID)
+}
+
+// AddEdgeUnchecked adds an edge from the vertex with the key srcKey (src) to the vertex with
+// the key dstKey (dst) and returns the key of the new edge.
+//
+// AddEdgeUnchecked does NOT return an error, if src or dst don't exist.
+//
+// AddEdgeUnchecked prevents duplicate edges and loops (and thereby maintains a valid
+// DAG).
+func (d *DAG) AddEdgeUnchecked(srcKey, dstKey string) (key string, err error) {
+
+	srcID := driver.NewDocumentID(d.vertices.Name(), srcKey).String()
+	dstID := driver.NewDocumentID(d.vertices.Name(), dstKey).String()
+	return d.addEdge(srcID, dstID)
+}
+
+func (d *DAG) addEdge(srcID, dstID string) (key string, err error) {
+
 	// prevent loops
 	var pathExists bool
 	if pathExists, err = d.pathExists(dstID, srcID); err != nil {
