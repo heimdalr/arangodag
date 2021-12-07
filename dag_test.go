@@ -325,63 +325,6 @@ func TestDAG_GetRoots(t *testing.T) {
 	}
 }
 
-func TestDAG_AddEdge(t *testing.T) {
-	t.Parallel()
-	d := standardDAG(t)
-	tests := []struct {
-		name             string
-		wantError        error
-		wantArangoErr    bool
-		wantArangoErrNum int
-		srcKey           string
-		dstKey           string
-	}{
-		{
-			name:   "happy path",
-			srcKey: "0",
-			dstKey: "5",
-		},
-		{
-			name:             "src doesn't exist",
-			wantArangoErr:    true,
-			wantArangoErrNum: 1202,
-			srcKey:           "8",
-			dstKey:           "1",
-		},
-		{
-			name:             "dst doesn't exist",
-			wantArangoErr:    true,
-			wantArangoErrNum: 1202,
-			srcKey:           "0",
-			dstKey:           "6",
-		},
-		{
-			name:             "duplicate edge",
-			wantArangoErr:    true,
-			wantArangoErrNum: 1210,
-			srcKey:           "0",
-			dstKey:           "1",
-		},
-		{
-			name:      "loop",
-			wantError: errors.New("loop"),
-			srcKey:    "1",
-			dstKey:    "0",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, got := d.AddEdge(tt.srcKey, tt.dstKey)
-			if tt.wantArangoErr && !driver.IsArangoErrorWithErrorNum(got, tt.wantArangoErrNum) {
-				t.Errorf("got %v, want arango Error with Num %d", got, tt.wantArangoErrNum)
-			}
-			if tt.wantError != nil && !reflect.DeepEqual(got, tt.wantError) {
-				t.Errorf("got %v, want Error %v", got, tt.wantError)
-			}
-		})
-	}
-}
-
 func TestDAG_DelVertex(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -454,6 +397,116 @@ func TestDAG_DelVertex(t *testing.T) {
 	}
 }
 
+func TestDAG_AddEdge(t *testing.T) {
+	t.Parallel()
+	d := standardDAG(t)
+	tests := []struct {
+		name             string
+		wantError        error
+		wantArangoErr    bool
+		wantArangoErrNum int
+		srcKey           string
+		dstKey           string
+	}{
+		{
+			name:   "happy path",
+			srcKey: "0",
+			dstKey: "5",
+		},
+		{
+			name:             "src doesn't exist",
+			wantArangoErr:    true,
+			wantArangoErrNum: 1202,
+			srcKey:           "8",
+			dstKey:           "1",
+		},
+		{
+			name:             "dst doesn't exist",
+			wantArangoErr:    true,
+			wantArangoErrNum: 1202,
+			srcKey:           "0",
+			dstKey:           "6",
+		},
+		{
+			name:             "duplicate edge",
+			wantArangoErr:    true,
+			wantArangoErrNum: 1210,
+			srcKey:           "0",
+			dstKey:           "1",
+		},
+		{
+			name:      "loop",
+			wantError: errors.New("loop"),
+			srcKey:    "1",
+			dstKey:    "0",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, got := d.AddEdge(tt.srcKey, tt.dstKey)
+			if tt.wantArangoErr && !driver.IsArangoErrorWithErrorNum(got, tt.wantArangoErrNum) {
+				t.Errorf("got %v, want arango Error with Num %d", got, tt.wantArangoErrNum)
+			}
+			if tt.wantError != nil && !reflect.DeepEqual(got, tt.wantError) {
+				t.Errorf("got %v, want Error %v", got, tt.wantError)
+			}
+		})
+	}
+}
+
+func TestDAG_AddEdgeUnchecked(t *testing.T) {
+	t.Parallel()
+	d := standardDAG(t)
+	tests := []struct {
+		name             string
+		wantError        error
+		wantArangoErr    bool
+		wantArangoErrNum int
+		srcKey           string
+		dstKey           string
+	}{
+		{
+			name:   "happy path",
+			srcKey: "0",
+			dstKey: "5",
+		},
+		{
+			name:   "src doesn't exist",
+			srcKey: "8",
+			dstKey: "1",
+		},
+		{
+			name:   "dst doesn't exist",
+			srcKey: "0",
+			dstKey: "6",
+		},
+		{
+			name:             "duplicate edge",
+			wantArangoErr:    true,
+			wantArangoErrNum: 1210,
+			srcKey:           "0",
+			dstKey:           "1",
+		},
+		{
+			name:      "loop",
+			wantError: errors.New("loop"),
+			srcKey:    "1",
+			dstKey:    "0",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, got := d.AddEdgeUnchecked(tt.srcKey, tt.dstKey)
+			if tt.wantArangoErr && !driver.IsArangoErrorWithErrorNum(got, tt.wantArangoErrNum) {
+				t.Errorf("got %v, want arango Error with Num %d", got, tt.wantArangoErrNum)
+			}
+			if tt.wantError != nil && !reflect.DeepEqual(got, tt.wantError) {
+				t.Errorf("got %v, want Error %v", got, tt.wantError)
+			}
+		})
+	}
+}
+
 func TestDAG_EdgeExists(t *testing.T) {
 	t.Parallel()
 	d := standardDAG(t)
@@ -505,7 +558,50 @@ func TestDAG_EdgeExists(t *testing.T) {
 			}
 		})
 	}
+}
 
+func TestDAG_DelEdge(t *testing.T) {
+	t.Parallel()
+	d := standardDAG(t)
+	tests := []struct {
+		name   string
+		srcKey string
+		dstKey string
+	}{
+		{
+			name:   "src does not exist",
+			srcKey: "6",
+			dstKey: "0",
+		},
+		{
+			name:   "dst does not exist",
+			srcKey: "0",
+			dstKey: "6",
+		},
+		{
+			name:   "neither src nor dest exist",
+			srcKey: "7",
+			dstKey: "6",
+		},
+		{
+			name:   "edge does not exist",
+			srcKey: "0",
+			dstKey: "5",
+		},
+		{
+			name:   "edge exists",
+			srcKey: "5",
+			dstKey: "4",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := d.DelEdge(tt.srcKey, tt.dstKey)
+			if err != nil {
+				t.Error(err)
+			}
+		})
+	}
 }
 
 func TestDAG_GetSize(t *testing.T) {
@@ -985,20 +1081,13 @@ func someNewDag(t *testing.T) *arangodag.DAG {
 		t.Fatalf("failed to setup client: %v", err)
 	}
 
-	dbName := someName()
-	vertexCollName := someName()
-	edgeCollName := someName()
+	uid := strconv.FormatInt(time.Now().UnixNano(), 10)
 
-	d, err := arangodag.NewDAG(dbName, vertexCollName, edgeCollName, client)
+	d, err := arangodag.NewDAG("test-"+uid, uid, client)
 	if err != nil {
 		t.Fatalf("failed to setup new dag: %v", err)
 	}
 	return d
-}
-
-func someName() string {
-	//return fmt.Sprintf("test_%s", uuid.New().String())
-	return fmt.Sprintf("test_%d", time.Now().UnixNano())
 }
 
 type idVertex struct {
