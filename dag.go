@@ -20,6 +20,11 @@ type DAG struct {
 	Edges    driver.Collection
 }
 
+type dagEdge struct {
+	From string `json:"_from"`
+	To   string `json:"_to"`
+}
+
 // NewDAG creates / initializes a new DAG.
 func NewDAG(dbName, collectionName string, client driver.Client) (d *DAG, err error) {
 
@@ -230,37 +235,31 @@ func (d *DAG) AddEdgeUnchecked(srcKey, dstKey string) (key string, err error) {
 	return d.addEdge(srcID, dstID)
 }
 
-func (d *DAG) addEdge(srcID, dstID string) (key string, err error) {
-
-	// prevent loops
-	var pathExists bool
-	if pathExists, err = d.pathExists(dstID, srcID); err != nil {
+// DelEdge removes the edge from the vertex with the key srcKey (src) to the vertex with
+// the key dstKey (dst).
+//
+// DelEdge does NOT return an error, if such an edge doesn't exist.
+func (d *DAG) DelEdge(srcKey, dstKey string) (err error) {
+	var key string
+	if key, err = d.getEdge(srcKey, dstKey); err != nil {
 		return
 	}
-	if pathExists {
-		return key, errors.New("loop")
+	if key != "" {
+		_, err = d.Edges.RemoveDocument(context.Background(), key)
 	}
-
-	// add edge
-	var meta driver.DocumentMeta
-	ctx := context.Background()
-	edge := struct {
-		From string `json:"_from"`
-		To   string `json:"_to"`
-	}{srcID, dstID}
-	if meta, err = d.Edges.CreateDocument(ctx, edge); err != nil {
-		return
-	}
-	return meta.Key, nil
+	return
 }
 
 // EdgeExists returns true, if an edge between the vertex with the key srcKey (src) and
 // the vertex with the key dstKey (dst) exists. If src or dst don't
 // exist, EdgeExists returns false.
-func (d *DAG) EdgeExists(srcKey, dstKey string) (bool, error) {
-	srcID := driver.NewDocumentID(d.Vertices.Name(), srcKey).String()
-	dstID := driver.NewDocumentID(d.Vertices.Name(), dstKey).String()
-	return d.edgeExists(srcID, dstID)
+func (d *DAG) EdgeExists(srcKey, dstKey string) (result bool, err error) {
+	var key string
+	if key, err = d.getEdge(srcKey, dstKey); err != nil {
+		return
+	}
+	result = key != ""
+	return
 }
 
 // GetSize returns the number of edges in the DAG.
@@ -273,9 +272,10 @@ func (d *DAG) GetSize() (int64, error) {
 //
 // It is up to the caller to close the cursor, if no longer needed.
 func (d *DAG) GetEdges() (driver.Cursor, error) {
-	query := "FOR v IN @@vertexCollection RETURN v"
+
+	query := "FOR v IN @@collection RETURN v"
 	bindVars := map[string]interface{}{
-		"@vertexCollection": d.Edges.Name(),
+		"@collection": d.Edges.Name(),
 	}
 	ctx := context.Background()
 	return d.DB.Query(ctx, query, bindVars)
@@ -429,10 +429,8 @@ func (d *DAG) DotGraph(g *dot.Graph) (nodeMapping map[string]dot.Node, err error
 	if cursor, err = d.GetEdges(); err != nil {
 		return
 	}
-	var edge struct {
-		From string `json:"_from"`
-		To   string `json:"_to"`
-	}
+
+	var edge dagEdge
 	for {
 		_, errRead := cursor.ReadDocument(ctx, &edge)
 		if driver.IsNoMoreDocuments(errRead) {
@@ -495,19 +493,56 @@ func (d *DAG) getRelatives(srcKey string, outbound bool, depth int, dfs bool) (d
 	ctx := context.Background()
 	return d.DB.Query(ctx, query, bindVars)
 }
+func (d *DAG) addEdge(srcID, dstID string) (key string, err error) {
 
-func (d *DAG) edgeExists(srcID, dstID string) (bool, error) {
-	query := "FOR v IN 1..1 OUTBOUND @from @@collection FILTER v._id == @to LIMIT 1 RETURN v"
+	// prevent loops
+	var pathExists bool
+	if pathExists, err = d.pathExists(dstID, srcID); err != nil {
+		return
+	}
+	if pathExists {
+		return key, errors.New("loop")
+	}
+
+	// add edge
+	var meta driver.DocumentMeta
+	ctx := context.Background()
+
+	edge := dagEdge{srcID, dstID}
+	if meta, err = d.Edges.CreateDocument(ctx, edge); err != nil {
+		return
+	}
+	return meta.Key, nil
+}
+
+func (d *DAG) getEdge(srcKey, dstKey string) (key string, err error) {
+	srcID := driver.NewDocumentID(d.Vertices.Name(), srcKey).String()
+	dstID := driver.NewDocumentID(d.Vertices.Name(), dstKey).String()
+	query := "FOR v, e IN 1..1 OUTBOUND @from @@collection FILTER v._id == @to LIMIT 1 RETURN e"
 	bindVars := map[string]interface{}{
 		"@collection": d.Edges.Name(),
 		"from":        srcID,
 		"to":          dstID,
 	}
-	return d.exists(query, bindVars)
+	ctx := context.Background()
+	cursor, err := d.DB.Query(ctx, query, bindVars)
+	if err != nil {
+		return
+	}
+	meta, errRead := cursor.ReadDocument(ctx, &struct{}{})
+	if driver.IsNoMoreDocuments(errRead) {
+		return
+	}
+	if errRead != nil {
+		err = errRead
+		return
+	}
+	key = meta.Key
+	return
 }
 
 func (d *DAG) pathExists(srcID, dstID string) (bool, error) {
-	query := "FOR v IN OUTBOUND SHORTEST_PATH @from TO @to @@collection LIMIT 1 RETURN v"
+	query := "FOR p IN OUTBOUND SHORTEST_PATH @from TO @to @@collection LIMIT 1 RETURN p"
 	bindVars := map[string]interface{}{
 		"@collection": d.Edges.Name(),
 		"from":        srcID,

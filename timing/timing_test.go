@@ -1,4 +1,4 @@
-package main
+package timing
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 )
 
@@ -17,7 +18,7 @@ type myVertex struct {
 	Key string `json:"_key"`
 }
 
-func main() {
+func TestTiming(t *testing.T) {
 	// new ArangoDB-connection
 	conn, _ := http.NewConnection(http.ConnectionConfig{Endpoints: []string{"http://localhost:8529"}})
 
@@ -39,7 +40,7 @@ func createLarge(d *arangodag.DAG) {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
-		largeAux(d, 5, 9, "0", 0, &vertexCount, &edgeCount, &wg)
+		largeAux(d, 5, 7, "0", 0, &vertexCount, &edgeCount, &wg)
 		wg.Done()
 	}()
 	wg.Wait()
