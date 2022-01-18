@@ -19,6 +19,9 @@ type myVertex struct {
 }
 
 func TestTiming(t *testing.T) {
+
+	ctx := context.Background()
+
 	// new ArangoDB-connection
 	conn, _ := http.NewConnection(http.ConnectionConfig{Endpoints: []string{"http://localhost:8529"}})
 
@@ -27,7 +30,7 @@ func TestTiming(t *testing.T) {
 
 	// connect to DAG (create a new one if necessary)
 	uid := strconv.FormatInt(time.Now().UnixNano(), 10)
-	d, _ := arangodag.NewDAG("test-"+uid, uid, client)
+	d, _ := arangodag.NewDAG(ctx, "test-"+uid, uid, client)
 
 	createLarge(d)
 	getDescendants(d)
@@ -35,7 +38,7 @@ func TestTiming(t *testing.T) {
 
 func createLarge(d *arangodag.DAG) {
 	start := time.Now()
-	_, _ = d.AddVertex(myVertex{"0"})
+	_, _ = d.AddVertex(context.Background(), myVertex{"0"})
 	var vertexCount, edgeCount int32
 	wg := sync.WaitGroup{}
 	wg.Add(1)
@@ -54,11 +57,11 @@ func createLarge(d *arangodag.DAG) {
 func getDescendants(d *arangodag.DAG) {
 	start := time.Now()
 	var descendantsCount int32
-	cursor, _ := d.GetDescendants("0", false)
+	ctx := context.Background()
+	cursor, _ := d.GetDescendants(ctx, "0", false)
 	defer func() {
 		_ = cursor.Close()
 	}()
-	ctx := context.Background()
 	for {
 		var vertex myVertex
 		_, errRead := cursor.ReadDocument(ctx, &vertex)
@@ -77,15 +80,16 @@ func getDescendants(d *arangodag.DAG) {
 }
 
 func largeAux(d *arangodag.DAG, level, branches int, parentKey string, parentValue int, vertexCount, edgeCount *int32, wg *sync.WaitGroup) {
+	ctx := context.Background()
 	if level > 1 {
 		for i := 1; i <= branches; i++ {
 			value := parentValue*10 + i
 			key := strconv.Itoa(value)
-			if _, err := d.AddVertex(myVertex{key}); err != nil {
+			if _, err := d.AddVertex(ctx, myVertex{key}); err != nil {
 				panic(err)
 			}
 			atomic.AddInt32(vertexCount, 1)
-			if _, err := d.AddEdgeUnchecked(parentKey, key); err != nil {
+			if _, err := d.AddEdgeUnchecked(ctx, parentKey, key); err != nil {
 				panic(err)
 			}
 			atomic.AddInt32(edgeCount, 1)

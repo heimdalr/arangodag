@@ -12,6 +12,8 @@ import (
 
 func ExampleDAG_GetChildren() {
 
+	ctx := context.Background()
+
 	// new arangoDB connection
 	conn, _ := http.NewConnection(http.ConnectionConfig{Endpoints: []string{"http://localhost:8529"}})
 
@@ -20,7 +22,7 @@ func ExampleDAG_GetChildren() {
 
 	// connect to DAG (create a new one if necessary)
 	uid := strconv.FormatInt(time.Now().UnixNano(), 10)
-	d, _ := arangodag.NewDAG("test-"+uid, uid, client)
+	d, _ := arangodag.NewDAG(ctx, "test-"+uid, uid, client)
 
 	// vertex type with self selected key
 	type idVertex struct {
@@ -28,24 +30,23 @@ func ExampleDAG_GetChildren() {
 	}
 
 	// add some vertices and edges
-	_, _ = d.AddVertex(idVertex{"0"})
+	_, _ = d.AddVertex(ctx, idVertex{"0"})
 	for i := 1; i < 10; i++ {
 		dstKey := strconv.Itoa(i)
-		_, _ = d.AddVertex(idVertex{dstKey})
-		_, _ = d.AddEdge("0", dstKey)
+		_, _ = d.AddVertex(ctx, idVertex{dstKey})
+		_, _ = d.AddEdge(ctx, "0", dstKey)
 	}
 
 	// get order and size
-	order, _ := d.GetOrder()
-	size, _ := d.GetSize()
+	order, _ := d.GetOrder(ctx)
+	size, _ := d.GetSize(ctx)
 	fmt.Printf("order: %d\nsize: %d\n", order, size)
 
 	fmt.Printf("children:\n")
-	cursor, _ := d.GetChildren("0")
+	cursor, _ := d.GetChildren(ctx, "0")
 	defer func() {
 		_ = cursor.Close()
 	}()
-	ctx := context.Background()
 	var vertex idVertex
 	for {
 		_, errRead := cursor.ReadDocument(ctx, &vertex)

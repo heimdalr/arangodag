@@ -5,6 +5,7 @@ import (
 	"github.com/arangodb/go-driver"
 	"github.com/arangodb/go-driver/http"
 	"github.com/heimdalr/arangodag"
+	"golang.org/x/net/context"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ type myDocument struct {
 }
 
 func Example() {
+	ctx := context.Background()
 
 	// new ArangoDB-connection
 	conn, _ := http.NewConnection(http.ConnectionConfig{Endpoints: []string{"http://localhost:8529"}})
@@ -25,21 +27,21 @@ func Example() {
 
 	// connect to DAG (create a new one if necessary)
 	uid := strconv.FormatInt(time.Now().UnixNano(), 10)
-	d, _ := arangodag.NewDAG("test-"+uid, uid, client)
+	d, _ := arangodag.NewDAG(ctx, "test-"+uid, uid, client)
 
 	// add some vertices (with explicit keys)
-	_, _ = d.AddVertex(myDocument{"0", "blah"})
-	_, _ = d.AddVertex(myDocument{"1", "foo"})
-	_, _ = d.AddVertex(myDocument{"2", "bar"})
+	_, _ = d.AddVertex(ctx, myDocument{"0", "blah"})
+	_, _ = d.AddVertex(ctx, myDocument{"1", "foo"})
+	_, _ = d.AddVertex(ctx, myDocument{"2", "bar"})
 
 	// add some edges
-	_, _ = d.AddEdge("0", "1")
-	_, _ = d.AddEdge("0", "2")
+	_, _ = d.AddEdge(ctx, "0", "1")
+	_, _ = d.AddEdge(ctx, "0", "2")
 
 	// get size
-	order, _ := d.GetOrder()
-	size, _ := d.GetSize()
-	dot, _ := d.String()
+	order, _ := d.GetOrder(ctx)
+	size, _ := d.GetSize(ctx)
+	dot, _ := d.String(ctx)
 
 	// print some DAG stats and the dot graph
 	fmt.Printf("order: %d\nsize: %d\n%s", order, size, trimForOutput(dot))
