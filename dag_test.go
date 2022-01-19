@@ -212,7 +212,7 @@ func TestDAG_GetOrder(t *testing.T) {
 	}
 }
 
-func TestDAG_GetVertices(t *testing.T) {
+func TestDAG_GetAllVertices(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	tests := []struct {
@@ -519,6 +519,7 @@ func TestDAG_AddEdge(t *testing.T) {
 	}
 }
 
+/*
 func TestDAG_AddEdgeUnchecked(t *testing.T) {
 	t.Parallel()
 	d := standardDAG(t)
@@ -572,6 +573,7 @@ func TestDAG_AddEdgeUnchecked(t *testing.T) {
 		})
 	}
 }
+*/
 
 func TestDAG_EdgeExists(t *testing.T) {
 	t.Parallel()

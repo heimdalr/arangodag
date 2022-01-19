@@ -89,7 +89,7 @@ func largeAux(d *arangodag.DAG, level, branches int, parentKey string, parentVal
 				panic(err)
 			}
 			atomic.AddInt32(vertexCount, 1)
-			if _, err := d.AddEdgeUnchecked(ctx, parentKey, key); err != nil {
+			if _, err := d.AddEdge(ctx, parentKey, key); err != nil {
 				panic(err)
 			}
 			atomic.AddInt32(edgeCount, 1)

@@ -218,19 +218,27 @@ func (d *DAG) GetRoots(ctx context.Context) (driver.Cursor, error) {
 //
 // AddEdge prevents duplicate edges and loops (and thereby maintains a valid
 // DAG).
-func (d *DAG) AddEdge(ctx context.Context, srcKey, dstKey string) (meta driver.DocumentMeta, err error) {
+func (d *DAG) AddEdge(ctx context.Context, srcKey, dstKey string) (driver.DocumentMeta, error) {
+
+	// prepare a slice for ReadDocuments results.
+	// TODO: for ReadDocument() you can pass in nil; how to avoid body parsing in array context []interface{nil, nil} doesn't work
+	results := make([]struct{}, 2)
 
 	// ensure vertices exist
-	var src, dst driver.DocumentMeta
-	if _, err = d.GetVertex(ctx, srcKey, &src); err != nil {
-		return
+	metaSlice, errorSlice, err := d.Vertices.ReadDocuments(ctx, []string{srcKey, dstKey}, results)
+	if err != nil {
+		return driver.DocumentMeta{}, err
 	}
-	if _, err = d.GetVertex(ctx, dstKey, &dst); err != nil {
-		return
+	for _, err = range errorSlice {
+		if err != nil {
+			return driver.DocumentMeta{}, err
+		}
 	}
-	return d.addEdge(ctx, src.ID.String(), dst.ID.String())
+
+	return d.addEdge(ctx, metaSlice[0].ID.String(), metaSlice[1].ID.String())
 }
 
+/*
 // AddEdgeUnchecked adds an edge from the vertex with the key srcKey (src) to the vertex with
 // the key dstKey (dst) and returns the key of the new edge.
 //
@@ -244,6 +252,7 @@ func (d *DAG) AddEdgeUnchecked(ctx context.Context, srcKey, dstKey string) (driv
 	dstID := driver.NewDocumentID(d.Vertices.Name(), dstKey).String()
 	return d.addEdge(ctx, srcID, dstID)
 }
+*/
 
 // DelEdge removes the edge from the vertex with the key srcKey (src) to the vertex with
 // the key dstKey (dst).
@@ -259,13 +268,12 @@ func (d *DAG) DelEdge(ctx context.Context, srcKey, dstKey string) (meta driver.D
 // EdgeExists returns true, if an edge between the vertex with the key srcKey (src) and
 // the vertex with the key dstKey (dst) exists. If src or dst don't
 // exist, EdgeExists returns false.
-func (d *DAG) EdgeExists(ctx context.Context, srcKey, dstKey string) (result bool, err error) {
-	var meta driver.DocumentMeta
-	if meta, err = d.getEdge(ctx, srcKey, dstKey); err != nil {
-		return
+func (d *DAG) EdgeExists(ctx context.Context, srcKey, dstKey string) (bool, error) {
+	meta, err := d.getEdge(ctx, srcKey, dstKey)
+	if err != nil {
+		return false, err
 	}
-	result = meta.Key != ""
-	return
+	return meta.Key != "", nil
 }
 
 // GetSize returns the number of edges in the DAG.
