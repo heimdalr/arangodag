@@ -142,6 +142,14 @@ func TestDAG_GetVertex(t *testing.T) {
 		t.Errorf("got %v, want %v", v1, v0)
 	}
 
+	meta, errVert1a := d.GetVertex(ctx, meta.Key, nil)
+	if errVert1a != nil {
+		t.Error(errVert1a)
+	}
+	if meta.Key != "1" {
+		t.Errorf("got %s, want %s", meta.Key, "1")
+	}
+
 	// "complex" document without key
 	v2 := foobar{A: "foo", B: "bar"}
 	var v3 foobar
@@ -251,7 +259,7 @@ func TestDAG_GetVertices(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.prepare(tt.d)
-			cursor, err := tt.d.GetVertices(ctx)
+			cursor, err := tt.d.GetAllVertices(ctx)
 			got := collector(t, cursor, err)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("got %v, want %v", got, tt.want)
