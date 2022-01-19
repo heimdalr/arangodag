@@ -121,6 +121,13 @@ func (d *DAG) GetVertex(ctx context.Context, srcKey string, vertex interface{}) 
 	return d.Vertices.ReadDocument(ctx, srcKey, vertex)
 }
 
+// GetVertices returns the vertices with the given keys.
+//
+// If src doesn't exist, GetVertex returns an error.
+func (d *DAG) GetVertices(ctx context.Context, keys []string, vertex interface{}) (driver.DocumentMetaSlice, driver.ErrorSlice, error) {
+	return d.Vertices.ReadDocuments(ctx, keys, vertex)
+}
+
 // DelVertex removes the vertex with the key srcKey (src). DelVertex also removes
 // any inbound and outbound edges. In case of success, DelVertex returns the
 // number of edges that were removed.
@@ -158,12 +165,12 @@ func (d *DAG) GetOrder(ctx context.Context) (int64, error) {
 
 }
 
-// GetVertices executes the query to retrieve all vertices of the DAG.
-// GetVertices returns a cursor that may be used retrieve the vertices
+// GetAllVertices executes the query to retrieve all vertices of the DAG.
+// GetAllVertices returns a cursor that may be used retrieve the vertices
 // one-by-one.
 //
 // It is up to the caller to close the cursor, if no longer needed.
-func (d *DAG) GetVertices(ctx context.Context) (driver.Cursor, error) {
+func (d *DAG) GetAllVertices(ctx context.Context) (driver.Cursor, error) {
 	query := "FOR v IN @@vertexCollection RETURN v"
 	bindVars := map[string]interface{}{
 		"@vertexCollection": d.Vertices.Name(),
@@ -401,7 +408,7 @@ func (d *DAG) DotGraph(ctx context.Context, g *dot.Graph) (nodeMapping map[strin
 	var cursor driver.Cursor
 
 	// read all vertices
-	if cursor, err = d.GetVertices(ctx); err != nil {
+	if cursor, err = d.GetAllVertices(ctx); err != nil {
 		return
 	}
 	var vertex driver.DocumentMeta
