@@ -104,28 +104,11 @@ func (d *DAG) AddVertex(ctx context.Context, vertex interface{}) (meta driver.Do
 	return d.Vertices.CreateDocument(driver.WithQueryCount(ctx), vertex)
 }
 
-// AddVertices adds the given vertices to the DAG and returns their keys.
-//
-// For vertices with `_key` field, this will be used as key. A new
-// key will be created otherwise.
-//
-// AddVertices prevents duplicate keys.
-func (d *DAG) AddVertices(ctx context.Context, vertices interface{}) (driver.DocumentMetaSlice, driver.ErrorSlice, error) {
-	return d.Vertices.CreateDocuments(ctx, vertices)
-}
-
 // GetVertex returns the vertex with the key srcKey.
 //
 // If src doesn't exist, GetVertex returns an error.
 func (d *DAG) GetVertex(ctx context.Context, srcKey string, vertex interface{}) (driver.DocumentMeta, error) {
 	return d.Vertices.ReadDocument(ctx, srcKey, vertex)
-}
-
-// GetVertices returns the vertices with the given keys.
-//
-// If src doesn't exist, GetVertex returns an error.
-func (d *DAG) GetVertices(ctx context.Context, keys []string, vertex interface{}) (driver.DocumentMetaSlice, driver.ErrorSlice, error) {
-	return d.Vertices.ReadDocuments(ctx, keys, vertex)
 }
 
 // DelVertex removes the vertex with the key srcKey (src). DelVertex also removes

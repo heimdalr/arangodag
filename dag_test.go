@@ -90,42 +90,6 @@ func TestDAG_AddVertex(t *testing.T) {
 
 }
 
-func TestDAG_AddVertices(t *testing.T) {
-	type args struct {
-		vertices []json.RawMessage
-	}
-	tests := []struct {
-		name string
-		args args
-		want []string
-	}{
-		{
-			name: "Single Vertex",
-			args: args{[]json.RawMessage{[]byte(`{"_key": "1"}`)}},
-			want: []string{"1"},
-		},
-		{
-			name: "Two Vertices",
-			args: args{[]json.RawMessage{[]byte(`{"_key": "1"}`), []byte(`{"_key": "2"}`)}},
-			want: []string{"1", "2"},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			d := someNewDag(t)
-			documentMetaSlice, _, err := d.AddVertices(context.Background(), tt.args.vertices)
-			got := documentMetaSlice.Keys()
-			if err != nil {
-				t.Error(err)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("AddVertices() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestDAG_GetVertex(t *testing.T) {
 	t.Parallel()
 	d := someNewDag(t)
