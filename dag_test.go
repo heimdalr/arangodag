@@ -634,41 +634,46 @@ func TestDAG_DelEdge(t *testing.T) {
 	d := standardDAG(t)
 	ctx := context.Background()
 	tests := []struct {
-		name   string
-		srcKey string
-		dstKey string
+		name    string
+		srcKey  string
+		dstKey  string
+		wantErr error
 	}{
 		{
-			name:   "src does not exist",
-			srcKey: "6",
-			dstKey: "0",
+			name:    "src does not exist",
+			srcKey:  "6",
+			dstKey:  "0",
+			wantErr: documentNotFoundError,
 		},
 		{
-			name:   "dst does not exist",
-			srcKey: "0",
-			dstKey: "6",
+			name:    "dst does not exist",
+			srcKey:  "0",
+			dstKey:  "6",
+			wantErr: documentNotFoundError,
 		},
 		{
-			name:   "neither src nor dest exist",
-			srcKey: "7",
-			dstKey: "6",
+			name:    "neither src nor dest exist",
+			srcKey:  "7",
+			dstKey:  "6",
+			wantErr: documentNotFoundError,
 		},
 		{
-			name:   "edge does not exist",
-			srcKey: "0",
-			dstKey: "5",
+			name:    "edge does not exist",
+			srcKey:  "0",
+			dstKey:  "5",
+			wantErr: documentNotFoundError,
 		},
 		{
 			name:   "edge exists",
-			srcKey: "5",
-			dstKey: "4",
+			srcKey: "0",
+			dstKey: "1",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := d.DelEdge(ctx, tt.srcKey, tt.dstKey)
-			if err != nil {
-				t.Error(err)
+			if err != tt.wantErr {
+				t.Errorf("got %v, want %v", err, tt.wantErr)
 			}
 		})
 	}

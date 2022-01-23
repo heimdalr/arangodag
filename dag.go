@@ -257,10 +257,18 @@ func (d *DAG) AddEdgeUnchecked(ctx context.Context, srcKey, dstKey string) (driv
 // DelEdge removes the edge from the vertex with the key srcKey (src) to the vertex with
 // the key dstKey (dst).
 //
-// DelEdge does NOT return an error, if such an edge doesn't exist.
+// DelEdge returns an error, if such an edge doesn't exist.
 func (d *DAG) DelEdge(ctx context.Context, srcKey, dstKey string) (meta driver.DocumentMeta, err error) {
-	if meta, err = d.getEdge(ctx, srcKey, dstKey); err != nil || meta.Key == "" {
+	if meta, err = d.getEdge(ctx, srcKey, dstKey); err != nil {
 		return
+	}
+	if meta.Key == "" {
+		return meta, driver.ArangoError{
+			HasError:     true,
+			Code:         404,
+			ErrorNum:     1202,
+			ErrorMessage: "document not found",
+		}
 	}
 	return d.Edges.RemoveDocument(ctx, meta.Key)
 }
