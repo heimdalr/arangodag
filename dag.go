@@ -218,24 +218,20 @@ func (d *DAG) GetRoots(ctx context.Context) (driver.Cursor, error) {
 //
 // AddEdge prevents duplicate edges and loops (and thereby maintains a valid
 // DAG).
-func (d *DAG) AddEdge(ctx context.Context, srcKey, dstKey string) (driver.DocumentMeta, error) {
-
-	// prepare a slice for ReadDocuments results.
-	// TODO: for ReadDocument() you can pass in nil; how to avoid body parsing in array context []interface{nil, nil} doesn't work
-	results := make([]struct{}, 2)
+func (d *DAG) AddEdge(ctx context.Context, srcKey, dstKey string) (meta driver.DocumentMeta, err error) {
 
 	// ensure vertices exist
-	metaSlice, errorSlice, err := d.Vertices.ReadDocuments(ctx, []string{srcKey, dstKey}, results)
-	if err != nil {
-		return driver.DocumentMeta{}, err
-	}
-	for _, err = range errorSlice {
-		if err != nil {
-			return driver.DocumentMeta{}, err
-		}
+	var src driver.DocumentMeta
+	if src, err = d.Vertices.ReadDocument(ctx, srcKey, nil); err != nil {
+		return
 	}
 
-	return d.addEdge(ctx, metaSlice[0].ID.String(), metaSlice[1].ID.String())
+	var dst driver.DocumentMeta
+	if dst, err = d.Vertices.ReadDocument(ctx, dstKey, nil); err != nil {
+		return
+	}
+
+	return d.addEdge(ctx, src.ID.String(), dst.ID.String())
 }
 
 /*
