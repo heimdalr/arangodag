@@ -3,10 +3,10 @@ package arangodag
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/arangodb/go-driver"
 	"github.com/emicklei/dot"
+	"net/http"
 )
 
 const (
@@ -148,7 +148,7 @@ func (d *DAG) GetVertex(ctx context.Context, srcKey string, data interface{}) (d
 
 // DelVertex removes the vertex with the key srcKey (src). DelVertex also removes
 // any inbound and outbound edges. In case of success, DelVertex returns the
-// number of edges that were removed.
+// Number of edges that were removed.
 //
 // If src doesn't exist, DelVertex returns an error.
 func (d *DAG) DelVertex(ctx context.Context, srcKey string) (count int64, err error) {
@@ -177,7 +177,7 @@ func (d *DAG) DelVertex(ctx context.Context, srcKey string) (count int64, err er
 	return
 }
 
-// GetOrder returns the number of vertices in the graph.
+// GetOrder returns the Number of vertices in the graph.
 func (d *DAG) GetOrder(ctx context.Context) (int64, error) {
 	return d.Vertices.Count(ctx)
 
@@ -287,7 +287,7 @@ func (d *DAG) DelEdge(ctx context.Context, srcKey, dstKey string) (meta driver.D
 func (d *DAG) EdgeExists(ctx context.Context, srcKey, dstKey string) (bool, error) {
 	_, err := d.getEdge(ctx, srcKey, dstKey, nil)
 	if err != nil {
-		if driver.IsNotFound(err) {
+		if IsDAGErrorWithNumber(err, DAGErrNotFound) {
 			return false, nil
 		}
 		return false, err
@@ -302,7 +302,7 @@ func (d *DAG) GetEdge(ctx context.Context, srcKey, dstKey string, data interface
 	return d.getEdge(ctx, srcKey, dstKey, data)
 }
 
-// GetSize returns the number of edges in the DAG.
+// GetSize returns the Number of edges in the DAG.
 func (d *DAG) GetSize(ctx context.Context) (int64, error) {
 	return d.Edges.Count(ctx)
 }
@@ -355,7 +355,7 @@ func (d *DAG) GetParents(ctx context.Context, srcKey string) (driver.Cursor, err
 	return d.getRelatives(ctx, srcKey, false, 1, false)
 }
 
-// GetParentCount returns the number parent-vertices of the vertex with the key
+// GetParentCount returns the Number parent-vertices of the vertex with the key
 // srcKey (src).
 //
 // If src doesn't exist, GetParentCount returns 0.
@@ -400,7 +400,7 @@ func (d *DAG) GetChildren(ctx context.Context, srcKey string) (driver.Cursor, er
 	return d.getRelatives(ctx, srcKey, true, 1, false)
 }
 
-// GetChildCount returns the number child-vertices of the vertex with the key
+// GetChildCount returns the Number child-vertices of the vertex with the key
 // srcKey.
 //
 // If src doesn't exist, GetChildCount returns 0.
@@ -537,7 +537,11 @@ func (d *DAG) addEdge(ctx context.Context, srcID, dstID driver.DocumentID, data 
 		return
 	}
 	if pathExists {
-		return meta, errors.New("loop")
+		return meta, DAGError{
+			Code:    http.StatusConflict,
+			Number:  DAGErrLoop,
+			Message: fmt.Sprintf("adding an edge from %s to %s would create a loop", srcID.Key(), dstID.Key()),
+		}
 	}
 
 	// add edge
@@ -570,11 +574,11 @@ func (d *DAG) getEdge(ctx context.Context, srcKey, dstKey string, data interface
 		meta, err = cursor.ReadDocument(ctx, &edge)
 	}
 	if driver.IsNoMoreDocuments(err) {
-		return meta, driver.ArangoError{
-			HasError:     true,
-			Code:         404,
-			ErrorNum:     1202,
-			ErrorMessage: "document not found",
+
+		return meta, DAGError{
+			Code:    http.StatusNotFound,
+			Number:  DAGErrNotFound,
+			Message: fmt.Sprintf("an edge from %s to %s doesn't exist", srcKey, dstKey),
 		}
 	}
 	if err != nil {
@@ -614,4 +618,43 @@ func (d *DAG) count(ctx context.Context, query string, bindVars map[string]inter
 	count = cursor.Count()
 	err = cursor.Close()
 	return
+}
+
+// Errors
+
+const (
+	DAGErrLoop     = 1000
+	DAGErrNotFound = 1001
+)
+
+type DAGError struct {
+	Code    int
+	Number  int
+	Message string
+}
+
+// Error returns the error Message of an ArangoError.
+func (e DAGError) Error() string {
+	if e.Message != "" {
+		return e.Message
+	}
+	return fmt.Sprintf("DAGError: Code %d, Number %d, Message %s", e.Code, e.Number, e.Message)
+}
+
+var Cause = func(err error) error { return err }
+
+// IsDAGError returns true when the given error is an DAGError.
+func IsDAGError(err error) bool {
+	_, ok := Cause(err).(DAGError)
+	return ok
+}
+
+func IsDAGErrorWithNumber(err error, number int) bool {
+	e, ok := Cause(err).(DAGError)
+	return ok && e.Number == number
+}
+
+func IsDAGErrorWithCode(err error, status int) bool {
+	e, ok := Cause(err).(DAGError)
+	return ok && e.Code == status
 }

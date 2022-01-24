@@ -3,7 +3,6 @@ package arangodag_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/arangodb/go-driver"
 	"github.com/arangodb/go-driver/http"
@@ -431,7 +430,8 @@ func TestDAG_AddEdge(t *testing.T) {
 	ctx := context.Background()
 	tests := []struct {
 		name             string
-		wantError        error
+		wantDAGErr       bool
+		wantDagErrNum    int
 		wantArangoErr    bool
 		wantArangoErrNum int
 		srcKey           string
@@ -477,20 +477,27 @@ func TestDAG_AddEdge(t *testing.T) {
 			dstKey:           "1",
 		},
 		{
-			name:      "loop",
-			wantError: errors.New("loop"),
-			srcKey:    "1",
-			dstKey:    "0",
+			name:          "loop",
+			wantDAGErr:    true,
+			wantDagErrNum: arangodag.DAGErrLoop,
+			srcKey:        "1",
+			dstKey:        "0",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, got := d.AddEdge(ctx, tt.srcKey, tt.dstKey, nil, false)
-			if tt.wantArangoErr && !driver.IsArangoErrorWithErrorNum(got, tt.wantArangoErrNum) {
-				t.Errorf("got %v, want arango Error with Num %d", got, tt.wantArangoErrNum)
+			_, got := d.AddEdge(ctx, tt.srcKey, tt.dstKey, nil, tt.createVerices)
+			if got != nil && !tt.wantArangoErr && !tt.wantDAGErr {
+				t.Error(got)
+				return
 			}
-			if tt.wantError != nil && !reflect.DeepEqual(got, tt.wantError) {
-				t.Errorf("got %v, want Error %v", got, tt.wantError)
+			if tt.wantArangoErr && !driver.IsArangoErrorWithErrorNum(got, tt.wantArangoErrNum) {
+				t.Errorf("got %v, want arango error with Num %d", got, tt.wantArangoErrNum)
+				return
+			}
+			if tt.wantDAGErr && !arangodag.IsDAGErrorWithNumber(got, tt.wantDagErrNum) {
+				t.Errorf("got %v, want DAG error with Num %d", got, tt.wantDagErrNum)
+				return
 			}
 		})
 	}
@@ -732,31 +739,36 @@ func TestDAG_DelEdge(t *testing.T) {
 		name    string
 		srcKey  string
 		dstKey  string
-		wantErr error
+		wantErr bool
+		errNum  int
 	}{
 		{
 			name:    "src does not exist",
 			srcKey:  "6",
 			dstKey:  "0",
-			wantErr: documentNotFoundError,
+			wantErr: true,
+			errNum:  arangodag.DAGErrNotFound,
 		},
 		{
 			name:    "dst does not exist",
 			srcKey:  "0",
 			dstKey:  "6",
-			wantErr: documentNotFoundError,
+			wantErr: true,
+			errNum:  arangodag.DAGErrNotFound,
 		},
 		{
 			name:    "neither src nor dest exist",
 			srcKey:  "7",
 			dstKey:  "6",
-			wantErr: documentNotFoundError,
+			wantErr: true,
+			errNum:  arangodag.DAGErrNotFound,
 		},
 		{
 			name:    "edge does not exist",
 			srcKey:  "0",
 			dstKey:  "5",
-			wantErr: documentNotFoundError,
+			wantErr: true,
+			errNum:  arangodag.DAGErrNotFound,
 		},
 		{
 			name:   "edge exists",
@@ -767,8 +779,19 @@ func TestDAG_DelEdge(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := d.DelEdge(ctx, tt.srcKey, tt.dstKey)
-			if err != tt.wantErr {
-				t.Errorf("got %v, want %v", err, tt.wantErr)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("got nil, want err")
+				} else if !arangodag.IsDAGError(err) {
+					t.Errorf("got %v, want DAG error", err)
+				} else if !arangodag.IsDAGErrorWithNumber(err, tt.errNum) {
+					t.Errorf("got err with num %d, want %d", err.(arangodag.DAGError).Number, tt.errNum)
+				}
+				return
+			}
+			if err != nil {
+				t.Error(err)
+				return
 			}
 		})
 	}
