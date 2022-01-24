@@ -232,7 +232,8 @@ func (d *DAG) GetRoots(ctx context.Context) (driver.Cursor, error) {
 // AddEdge adds an edge from the vertex with the key srcKey (src) to the vertex with
 // the key dstKey (dst) and returns the key of the new edge.
 //
-// AddEdge returns an error, if src or dst don't exist.
+// If createVertices is true, AddEdge creates missing vertices. Otherwise, it
+// raises an error.
 //
 // AddEdge prevents duplicate edges and loops (and thereby maintains a valid
 // DAG).
