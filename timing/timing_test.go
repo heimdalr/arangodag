@@ -13,11 +13,6 @@ import (
 	"time"
 )
 
-// vertex type with self selected key
-type myVertex struct {
-	Key string `json:"_key"`
-}
-
 func TestTiming(t *testing.T) {
 
 	ctx := context.Background()
@@ -38,7 +33,7 @@ func TestTiming(t *testing.T) {
 
 func createLarge(d *arangodag.DAG) {
 	start := time.Now()
-	_, _ = d.AddVertex(context.Background(), myVertex{"0"})
+	_, _ = d.AddNamedVertex(context.Background(), "0", nil)
 	var vertexCount, edgeCount int32
 	wg := sync.WaitGroup{}
 	wg.Add(1)
@@ -63,8 +58,7 @@ func getDescendants(d *arangodag.DAG) {
 		_ = cursor.Close()
 	}()
 	for {
-		var vertex myVertex
-		_, errRead := cursor.ReadDocument(ctx, &vertex)
+		_, errRead := cursor.ReadDocument(ctx, &struct{}{})
 		if driver.IsNoMoreDocuments(errRead) {
 			break
 		}
@@ -85,11 +79,11 @@ func largeAux(d *arangodag.DAG, level, branches int, parentKey string, parentVal
 		for i := 1; i <= branches; i++ {
 			value := parentValue*10 + i
 			key := strconv.Itoa(value)
-			if _, err := d.AddVertex(ctx, myVertex{key}); err != nil {
+			if _, err := d.AddNamedVertex(ctx, key, nil); err != nil {
 				panic(err)
 			}
 			atomic.AddInt32(vertexCount, 1)
-			if _, err := d.AddEdge(ctx, parentKey, key); err != nil {
+			if _, err := d.AddEdge(ctx, parentKey, key, nil, false); err != nil {
 				panic(err)
 			}
 			atomic.AddInt32(edgeCount, 1)

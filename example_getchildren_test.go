@@ -24,17 +24,12 @@ func ExampleDAG_GetChildren() {
 	uid := strconv.FormatInt(time.Now().UnixNano(), 10)
 	d, _ := arangodag.NewDAG(ctx, "test-"+uid, uid, client)
 
-	// vertex type with self selected key
-	type idVertex struct {
-		Key string `json:"_key"`
-	}
-
 	// add some vertices and edges
-	_, _ = d.AddVertex(ctx, idVertex{"0"})
+	_, _ = d.AddNamedVertex(ctx, "0", nil)
 	for i := 1; i < 10; i++ {
 		dstKey := strconv.Itoa(i)
-		_, _ = d.AddVertex(ctx, idVertex{dstKey})
-		_, _ = d.AddEdge(ctx, "0", dstKey)
+		_, _ = d.AddNamedVertex(ctx, dstKey, nil)
+		_, _ = d.AddEdge(ctx, "0", dstKey, nil, false)
 	}
 
 	// get order and size
@@ -47,16 +42,15 @@ func ExampleDAG_GetChildren() {
 	defer func() {
 		_ = cursor.Close()
 	}()
-	var vertex idVertex
 	for {
-		_, errRead := cursor.ReadDocument(ctx, &vertex)
+		meta, errRead := cursor.ReadDocument(ctx, &struct{}{})
 		if driver.IsNoMoreDocuments(errRead) {
 			break
 		}
 		if errRead != nil {
 			panic(errRead)
 		}
-		fmt.Printf("- %s\n", vertex.Key)
+		fmt.Printf("- %s\n", meta.Key)
 	}
 
 	// Unordered output:

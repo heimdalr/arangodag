@@ -21,8 +21,20 @@ type DAG struct {
 }
 
 type dagEdge struct {
-	From string `json:"_from"`
-	To   string `json:"_to"`
+	From driver.DocumentID `json:"_from"`
+	To   driver.DocumentID `json:"_to"`
+	Data interface{}       `json:"data,omitempty"`
+}
+
+type dagVertex struct {
+	Key  string      `json:"_key,omitempty"`
+	Data interface{} `json:"data,omitempty"`
+}
+
+// KeyInterface describes the interface a type must implement in order to
+// explicitly specify the vertex key.
+type KeyInterface interface {
+	Key() string
 }
 
 // NewDAG creates / initializes a new DAG.
@@ -91,24 +103,47 @@ func NewDAG(ctx context.Context, dbName, collectionName string, client driver.Cl
 	return &DAG{DB: db, Vertices: vertices, Edges: edges}, nil
 }
 
-// AddVertex adds the given vertex to the DAG and returns its key.
+// AddVertex adds a new vertex to the DAG with the given data.
 //
-// If the given vertex contains a `_key` field, this will be used as key. A new
-// key will be created otherwise.
+// If the given data implements the KeyInterface, then the key for the new vertex
+// will be taken from the data. If not, a key will be generated.
 //
-// Use the type json.RawMessage (i.e. []byte) to add "raw" JSON strings /
+// AddVertex prevents duplicate keys.
+func (d *DAG) AddVertex(ctx context.Context, data interface{}) (meta driver.DocumentMeta, err error) {
+
+	var key string
+	if i, ok := data.(KeyInterface); ok {
+		key = i.Key()
+	}
+	v := dagVertex{
+		Key:  key,
+		Data: data,
+	}
+	return d.Vertices.CreateDocument(driver.WithQueryCount(ctx), v)
+}
+
+// AddNamedVertex adds a vertex with the given key and data to the DAG.
+//
+// Use the type json.RawMessage for data (i.e. []byte) to add "raw" JSON strings /
 // byte slices.
 //
 // AddVertex prevents duplicate keys.
-func (d *DAG) AddVertex(ctx context.Context, vertex interface{}) (meta driver.DocumentMeta, err error) {
-	return d.Vertices.CreateDocument(driver.WithQueryCount(ctx), vertex)
+func (d *DAG) AddNamedVertex(ctx context.Context, key string, data interface{}) (meta driver.DocumentMeta, err error) {
+	v := dagVertex{
+		Key:  key,
+		Data: data,
+	}
+	return d.Vertices.CreateDocument(driver.WithQueryCount(ctx), v)
 }
 
 // GetVertex returns the vertex with the key srcKey.
 //
 // If src doesn't exist, GetVertex returns an error.
-func (d *DAG) GetVertex(ctx context.Context, srcKey string, vertex interface{}) (driver.DocumentMeta, error) {
-	return d.Vertices.ReadDocument(ctx, srcKey, vertex)
+func (d *DAG) GetVertex(ctx context.Context, srcKey string, data interface{}) (driver.DocumentMeta, error) {
+	v := dagVertex{
+		Data: data,
+	}
+	return d.Vertices.ReadDocument(ctx, srcKey, &v)
 }
 
 // DelVertex removes the vertex with the key srcKey (src). DelVertex also removes
@@ -201,66 +236,69 @@ func (d *DAG) GetRoots(ctx context.Context) (driver.Cursor, error) {
 //
 // AddEdge prevents duplicate edges and loops (and thereby maintains a valid
 // DAG).
-func (d *DAG) AddEdge(ctx context.Context, srcKey, dstKey string) (meta driver.DocumentMeta, err error) {
+func (d *DAG) AddEdge(ctx context.Context, srcKey, dstKey string, data interface{}, createVertices bool) (meta driver.DocumentMeta, err error) {
 
 	// ensure vertices exist
 	var src driver.DocumentMeta
 	if src, err = d.Vertices.ReadDocument(ctx, srcKey, nil); err != nil {
-		return
+
+		// if not found and createVertices, try to create a vertex with no data
+		if driver.IsNotFound(err) && createVertices {
+			if src, err = d.AddNamedVertex(ctx, srcKey, nil); err != nil {
+				return
+			}
+		} else {
+			return
+		}
 	}
 
+	// ensure vertices exist
 	var dst driver.DocumentMeta
 	if dst, err = d.Vertices.ReadDocument(ctx, dstKey, nil); err != nil {
-		return
+
+		// if not found and createVertices, try to create a vertex with no data
+		if driver.IsNotFound(err) && createVertices {
+			if dst, err = d.AddNamedVertex(ctx, dstKey, nil); err != nil {
+				return
+			}
+		} else {
+			return
+		}
 	}
 
-	return d.addEdge(ctx, src.ID.String(), dst.ID.String())
+	return d.addEdge(ctx, src.ID, dst.ID, data)
 }
-
-/*
-// AddEdgeUnchecked adds an edge from the vertex with the key srcKey (src) to the vertex with
-// the key dstKey (dst) and returns the key of the new edge.
-//
-// AddEdgeUnchecked does NOT return an error, if src or dst don't exist.
-//
-// AddEdgeUnchecked prevents duplicate edges and loops (and thereby maintains a valid
-// DAG).
-func (d *DAG) AddEdgeUnchecked(ctx context.Context, srcKey, dstKey string) (driver.DocumentMeta, error) {
-
-	srcID := driver.NewDocumentID(d.Vertices.Name(), srcKey).String()
-	dstID := driver.NewDocumentID(d.Vertices.Name(), dstKey).String()
-	return d.addEdge(ctx, srcID, dstID)
-}
-*/
 
 // DelEdge removes the edge from the vertex with the key srcKey (src) to the vertex with
 // the key dstKey (dst).
 //
 // DelEdge returns an error, if such an edge doesn't exist.
 func (d *DAG) DelEdge(ctx context.Context, srcKey, dstKey string) (meta driver.DocumentMeta, err error) {
-	if meta, err = d.getEdge(ctx, srcKey, dstKey); err != nil {
+	if meta, err = d.getEdge(ctx, srcKey, dstKey, nil); err != nil {
 		return
-	}
-	if meta.Key == "" {
-		return meta, driver.ArangoError{
-			HasError:     true,
-			Code:         404,
-			ErrorNum:     1202,
-			ErrorMessage: "document not found",
-		}
 	}
 	return d.Edges.RemoveDocument(ctx, meta.Key)
 }
 
-// EdgeExists returns true, if an edge between the vertex with the key srcKey (src) and
-// the vertex with the key dstKey (dst) exists. If src or dst don't
-// exist, EdgeExists returns false.
+// EdgeExists returns true, if an edge between the vertex with the key srcKey
+// (src) and the vertex with the key dstKey (dst) exists. If src, dst or an edge
+// between the two doesn't exist, GetEdge returns an error.
 func (d *DAG) EdgeExists(ctx context.Context, srcKey, dstKey string) (bool, error) {
-	meta, err := d.getEdge(ctx, srcKey, dstKey)
+	_, err := d.getEdge(ctx, srcKey, dstKey, nil)
 	if err != nil {
+		if driver.IsNotFound(err) {
+			return false, nil
+		}
 		return false, err
 	}
-	return meta.Key != "", nil
+	return true, nil
+}
+
+// GetEdge returns the edge between the vertex with the key srcKey (src) and the
+// vertex with the key dstKey (dst), if such exists. If src, dst or an edge
+// between the two doesn't exist, GetEdge returns an error.
+func (d *DAG) GetEdge(ctx context.Context, srcKey, dstKey string, data interface{}) (driver.DocumentMeta, error) {
+	return d.getEdge(ctx, srcKey, dstKey, data)
 }
 
 // GetSize returns the number of edges in the DAG.
@@ -395,10 +433,10 @@ func (d *DAG) GetDescendants(ctx context.Context, srcKey string, dfs bool) (driv
 }
 
 // DotGraph returns a (dot-) graph of the DAG.
-func (d *DAG) DotGraph(ctx context.Context, g *dot.Graph) (nodeMapping map[string]dot.Node, err error) {
+func (d *DAG) DotGraph(ctx context.Context, g *dot.Graph) (nodeMapping map[driver.DocumentID]dot.Node, err error) {
 
 	// mapping between arangoDB-vertex keys and dot nodes
-	nodeMapping = make(map[string]dot.Node)
+	nodeMapping = make(map[driver.DocumentID]dot.Node)
 
 	var cursor driver.Cursor
 
@@ -417,7 +455,7 @@ func (d *DAG) DotGraph(ctx context.Context, g *dot.Graph) (nodeMapping map[strin
 			return
 		}
 		node := g.Node(vertex.Key).Label(vertex.Key)
-		nodeMapping[vertex.ID.String()] = node
+		nodeMapping[vertex.ID] = node
 	}
 	if err = cursor.Close(); err != nil {
 		return
@@ -490,7 +528,7 @@ func (d *DAG) getRelatives(ctx context.Context, srcKey string, outbound bool, de
 
 	return d.DB.Query(ctx, query, bindVars)
 }
-func (d *DAG) addEdge(ctx context.Context, srcID, dstID string) (meta driver.DocumentMeta, err error) {
+func (d *DAG) addEdge(ctx context.Context, srcID, dstID driver.DocumentID, data interface{}) (meta driver.DocumentMeta, err error) {
 
 	// prevent loops
 	var pathExists bool
@@ -502,14 +540,14 @@ func (d *DAG) addEdge(ctx context.Context, srcID, dstID string) (meta driver.Doc
 	}
 
 	// add edge
-	edge := dagEdge{srcID, dstID}
+	edge := dagEdge{srcID, dstID, data}
 	return d.Edges.CreateDocument(ctx, edge)
 }
 
-func (d *DAG) getEdge(ctx context.Context, srcKey, dstKey string) (meta driver.DocumentMeta, err error) {
+func (d *DAG) getEdge(ctx context.Context, srcKey, dstKey string, data interface{}) (meta driver.DocumentMeta, err error) {
 	srcID := driver.NewDocumentID(d.Vertices.Name(), srcKey).String()
 	dstID := driver.NewDocumentID(d.Vertices.Name(), dstKey).String()
-	query := "FOR v, e IN 1..1 OUTBOUND @from @@collection FILTER v._id == @to LIMIT 1 RETURN e"
+	query := "FOR e IN @@collection FILTER e._from == @from && e._to == @to LIMIT 1 RETURN e"
 	bindVars := map[string]interface{}{
 		"@collection": d.Edges.Name(),
 		"from":        srcID,
@@ -519,14 +557,33 @@ func (d *DAG) getEdge(ctx context.Context, srcKey, dstKey string) (meta driver.D
 	if cursor, err = d.DB.Query(ctx, query, bindVars); err != nil {
 		return
 	}
-	meta, err = cursor.ReadDocument(ctx, &struct{}{})
-	if driver.IsNoMoreDocuments(err) {
-		return meta, nil
+
+	if data == nil {
+		meta, err = cursor.ReadDocument(ctx, &struct{}{})
+	} else {
+		edge := struct {
+			Data interface{} `json:"data,omitempty"`
+		}{
+			Data: data,
+		}
+		meta, err = cursor.ReadDocument(ctx, &edge)
 	}
+	if driver.IsNoMoreDocuments(err) {
+		return meta, driver.ArangoError{
+			HasError:     true,
+			Code:         404,
+			ErrorNum:     1202,
+			ErrorMessage: "document not found",
+		}
+	}
+	if err != nil {
+		return driver.DocumentMeta{}, err
+	}
+
 	return meta, nil
 }
 
-func (d *DAG) pathExists(ctx context.Context, srcID, dstID string) (bool, error) {
+func (d *DAG) pathExists(ctx context.Context, srcID, dstID driver.DocumentID) (bool, error) {
 	query := "FOR p IN OUTBOUND SHORTEST_PATH @from TO @to @@collection LIMIT 1 RETURN p"
 	bindVars := map[string]interface{}{
 		"@collection": d.Edges.Name(),

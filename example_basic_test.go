@@ -11,11 +11,6 @@ import (
 	"time"
 )
 
-type myDocument struct {
-	Key  string `json:"_key"`
-	Text string `json:"text"`
-}
-
 func Example() {
 	ctx := context.Background()
 
@@ -30,13 +25,13 @@ func Example() {
 	d, _ := arangodag.NewDAG(ctx, "test-"+uid, uid, client)
 
 	// add some vertices (with explicit keys)
-	_, _ = d.AddVertex(ctx, myDocument{"0", "blah"})
-	_, _ = d.AddVertex(ctx, myDocument{"1", "foo"})
-	_, _ = d.AddVertex(ctx, myDocument{"2", "bar"})
+	_, _ = d.AddNamedVertex(ctx, "0", "blah")
+	_, _ = d.AddNamedVertex(ctx, "1", "foo")
+	_, _ = d.AddNamedVertex(ctx, "2", "bar")
 
 	// add some edges
-	_, _ = d.AddEdge(ctx, "0", "1")
-	_, _ = d.AddEdge(ctx, "0", "2")
+	_, _ = d.AddEdge(ctx, "0", "1", nil, false)
+	_, _ = d.AddEdge(ctx, "0", "2", nil, false)
 
 	// get size
 	order, _ := d.GetOrder(ctx)
