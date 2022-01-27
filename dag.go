@@ -17,10 +17,10 @@ const (
 
 // DAG implements the data structure of the DAG.
 type DAG struct {
-	DB            driver.Database
-	Vertices      driver.Collection
-	Edges         driver.Collection
-	querryLogging bool
+	DB           driver.Database
+	Vertices     driver.Collection
+	Edges        driver.Collection
+	queryLogging bool
 }
 
 type dagEdge struct {
@@ -108,7 +108,7 @@ func NewDAG(ctx context.Context, dbName, collectionName string, client driver.Cl
 
 // SetQueryLogging enables or disables query logging.
 func (d *DAG) SetQueryLogging(queryLogging bool) {
-	d.querryLogging = queryLogging
+	d.queryLogging = queryLogging
 }
 
 // AddVertex adds a new vertex to the DAG with the given data.
@@ -637,7 +637,7 @@ func (d *DAG) count(ctx context.Context, query string, bindVars map[string]inter
 }
 
 func (d *DAG) logQuery(query string, bindVars map[string]interface{}) {
-	if !d.querryLogging {
+	if !d.queryLogging {
 		return
 	}
 	event := log.Debug().Str("query", query)
