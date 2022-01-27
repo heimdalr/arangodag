@@ -1344,8 +1344,6 @@ func Test_parse(t *testing.T) {
 }
 
 func parse(data json.RawMessage, i interface{}) error {
-	typeOfData := reflect.TypeOf(i)
-	fmt.Printf("type: %v", typeOfData)
 	bytes, err := data.MarshalJSON()
 	if err != nil {
 		return err

@@ -3,9 +3,11 @@ package arangodag
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/arangodb/go-driver"
 	"github.com/emicklei/dot"
+	"github.com/rs/zerolog/log"
 	"net/http"
 )
 
@@ -15,9 +17,10 @@ const (
 
 // DAG implements the data structure of the DAG.
 type DAG struct {
-	DB       driver.Database
-	Vertices driver.Collection
-	Edges    driver.Collection
+	DB         driver.Database
+	Vertices   driver.Collection
+	Edges      driver.Collection
+	LogQueries bool
 }
 
 type dagEdge struct {
@@ -133,7 +136,7 @@ func (d *DAG) AddNamedVertex(ctx context.Context, key string, data interface{}) 
 		Key:  key,
 		Data: data,
 	}
-	return d.Vertices.CreateDocument(driver.WithQueryCount(ctx), v)
+	return d.Vertices.CreateDocument(ctx, v)
 }
 
 // GetVertex returns the vertex with the key srcKey.
@@ -163,6 +166,7 @@ func (d *DAG) DelVertex(ctx context.Context, srcKey string) (count int64, err er
 		"from":            id,
 		"@edgeCollection": d.Edges.Name(),
 	}
+	d.logQuery(query, bindVars)
 	var cursor driver.Cursor
 	if cursor, err = d.DB.Query(driver.WithQueryCount(ctx), query, bindVars); err != nil {
 		return
@@ -193,6 +197,7 @@ func (d *DAG) GetAllVertices(ctx context.Context) (driver.Cursor, error) {
 	bindVars := map[string]interface{}{
 		"@vertexCollection": d.Vertices.Name(),
 	}
+	d.logQuery(query, bindVars)
 	return d.DB.Query(ctx, query, bindVars)
 }
 
@@ -210,6 +215,7 @@ func (d *DAG) GetLeaves(ctx context.Context) (driver.Cursor, error) {
 		"@vertexCollection": d.Vertices.Name(),
 		"@edgeCollection":   d.Edges.Name(),
 	}
+	d.logQuery(query, bindVars)
 	return d.DB.Query(ctx, query, bindVars)
 }
 
@@ -226,6 +232,7 @@ func (d *DAG) GetRoots(ctx context.Context) (driver.Cursor, error) {
 		"@vertexCollection": d.Vertices.Name(),
 		"@edgeCollection":   d.Edges.Name(),
 	}
+	d.logQuery(query, bindVars)
 	return d.DB.Query(ctx, query, bindVars)
 }
 
@@ -317,6 +324,7 @@ func (d *DAG) GetEdges(ctx context.Context) (driver.Cursor, error) {
 	bindVars := map[string]interface{}{
 		"@collection": d.Edges.Name(),
 	}
+	d.logQuery(query, bindVars)
 	return d.DB.Query(ctx, query, bindVars)
 }
 
@@ -340,6 +348,7 @@ func (d *DAG) GetShortestPath(ctx context.Context, srcKey, dstKey string) (drive
 		"from":        srcID,
 		"to":          dstID,
 	}
+	d.logQuery(query, bindVars)
 	return d.DB.Query(ctx, query, bindVars)
 }
 
@@ -526,7 +535,7 @@ func (d *DAG) getRelatives(ctx context.Context, srcKey string, outbound bool, de
 		"uniqueVertices": uniqueVertices,
 		"depth":          depth,
 	}
-
+	d.logQuery(query, bindVars)
 	return d.DB.Query(ctx, query, bindVars)
 }
 func (d *DAG) addEdge(ctx context.Context, srcID, dstID driver.DocumentID, data interface{}) (meta driver.DocumentMeta, err error) {
@@ -558,6 +567,7 @@ func (d *DAG) getEdge(ctx context.Context, srcKey, dstKey string, data interface
 		"from":        srcID,
 		"to":          dstID,
 	}
+	d.logQuery(query, bindVars)
 	var cursor driver.Cursor
 	if cursor, err = d.DB.Query(ctx, query, bindVars); err != nil {
 		return
@@ -611,6 +621,7 @@ func (d *DAG) exists(ctx context.Context, query string, bindVars map[string]inte
 func (d *DAG) count(ctx context.Context, query string, bindVars map[string]interface{}) (count int64, err error) {
 	ctx = driver.WithQueryCount(ctx)
 	var cursor driver.Cursor
+	d.logQuery(query, bindVars)
 	cursor, err = d.DB.Query(ctx, query, bindVars)
 	if err != nil {
 		return
@@ -620,7 +631,21 @@ func (d *DAG) count(ctx context.Context, query string, bindVars map[string]inter
 	return
 }
 
-// Errors
+func (d *DAG) logQuery(query string, bindVars map[string]interface{}) {
+	if !d.LogQueries {
+		return
+	}
+	event := log.Debug().Str("query", query)
+	jsonBytes, err := json.Marshal(bindVars)
+	if err != nil {
+		event.Str("bindVars", fmt.Sprintf("%v", bindVars))
+	} else {
+		event.RawJSON("bindVars", jsonBytes)
+	}
+	event.Msg("query")
+}
+
+/**** Errors ***/
 
 const (
 	DAGErrLoop     = 1000
