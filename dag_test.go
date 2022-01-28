@@ -150,7 +150,7 @@ func TestDAG_GetVertex(t *testing.T) {
 	}
 }
 
-func TestDAG_UpdateVertex(t *testing.T) {
+func TestDAG_PutVertex(t *testing.T) {
 	t.Parallel()
 	d := someNewDag(t)
 	ctx := context.Background()
@@ -158,7 +158,7 @@ func TestDAG_UpdateVertex(t *testing.T) {
 	v0 := idVertex{"1"}
 	meta, _ := d.AddVertex(ctx, v0)
 	v0update := idVertex{"foo"}
-	_, errUpdate := d.UpdateVertex(ctx, meta.Key, v0update)
+	_, errUpdate := d.PutVertex(ctx, meta.Key, v0update)
 	if errUpdate != nil {
 		t.Error(errUpdate)
 	}
