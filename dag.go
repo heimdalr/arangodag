@@ -116,6 +116,8 @@ func (d *DAG) SetQueryLogging(queryLogging bool) {
 // If the given data implements the KeyInterface, then the key for the new vertex
 // will be taken from the data. If not, a key will be generated.
 //
+// Note, only exported fields in data (i.e. capital first letter), will be stored.
+//
 // AddVertex prevents duplicate keys.
 func (d *DAG) AddVertex(ctx context.Context, data interface{}) (meta driver.DocumentMeta, err error) {
 
@@ -127,7 +129,7 @@ func (d *DAG) AddVertex(ctx context.Context, data interface{}) (meta driver.Docu
 		Key:  key,
 		Data: data,
 	}
-	return d.Vertices.CreateDocument(driver.WithQueryCount(ctx), v)
+	return d.Vertices.CreateDocument(ctx, v)
 }
 
 // AddNamedVertex adds a vertex with the given key and data to the DAG.
@@ -142,6 +144,14 @@ func (d *DAG) AddNamedVertex(ctx context.Context, key string, data interface{}) 
 		Data: data,
 	}
 	return d.Vertices.CreateDocument(ctx, v)
+}
+
+// UpdateVertex updates the data of the vertex with the given key.
+func (d *DAG) UpdateVertex(ctx context.Context, key string, data interface{}) (meta driver.DocumentMeta, err error) {
+	v := dagVertex{
+		Data: data,
+	}
+	return d.Vertices.UpdateDocument(ctx, key, v)
 }
 
 // GetVertex returns the vertex with the key srcKey.

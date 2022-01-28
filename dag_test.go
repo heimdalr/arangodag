@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/arangodb/go-driver"
 	"github.com/arangodb/go-driver/http"
-	"github.com/go-test/deep"
 	"github.com/heimdalr/arangodag"
 	"os"
 	"reflect"
@@ -56,7 +55,7 @@ func TestDAG_AddVertex(t *testing.T) {
 
 	// vertex with id
 	key := "foo"
-	metaReturned, errAdd2 := d.AddVertex(ctx, idVertex{value: key})
+	metaReturned, errAdd2 := d.AddVertex(ctx, idVertex{key})
 	if errAdd2 != nil {
 		t.Error(errAdd2)
 	}
@@ -65,7 +64,7 @@ func TestDAG_AddVertex(t *testing.T) {
 	}
 
 	// duplicate
-	_, errDuplicate := d.AddVertex(ctx, idVertex{value: "1"})
+	_, errDuplicate := d.AddVertex(ctx, idVertex{"1"})
 	if errDuplicate == nil {
 		t.Errorf("got 'nil', want duplicate Error")
 	}
@@ -94,14 +93,14 @@ func TestDAG_GetVertex(t *testing.T) {
 	d := someNewDag(t)
 	ctx := context.Background()
 
-	v0 := idVertex{value: "1"}
+	v0 := idVertex{"1"}
 	meta, _ := d.AddVertex(ctx, v0)
 	var v1 idVertex
 	_, errVert1 := d.GetVertex(ctx, meta.Key, &v1)
 	if errVert1 != nil {
 		t.Error(errVert1)
 	}
-	if deep.Equal(v0, v1) != nil {
+	if !reflect.DeepEqual(v0, v1) {
 		t.Errorf("got %v, want %v", v1, v0)
 	}
 
@@ -121,7 +120,7 @@ func TestDAG_GetVertex(t *testing.T) {
 	if errVert2 != nil {
 		t.Error(errVert2)
 	}
-	if deep.Equal(v2, v3) != nil {
+	if !reflect.DeepEqual(v2, v3) {
 		t.Errorf("got %v, want %v", v3, v2)
 	}
 
@@ -133,7 +132,7 @@ func TestDAG_GetVertex(t *testing.T) {
 	if errVert3 != nil {
 		t.Error(errVert3)
 	}
-	if deep.Equal(v4, v5) != nil {
+	if !reflect.DeepEqual(v4, v5) {
 		t.Errorf("got %v, want %v", v5, v4)
 	}
 
@@ -151,6 +150,28 @@ func TestDAG_GetVertex(t *testing.T) {
 	}
 }
 
+func TestDAG_UpdateVertex(t *testing.T) {
+	t.Parallel()
+	d := someNewDag(t)
+	ctx := context.Background()
+
+	v0 := idVertex{"1"}
+	meta, _ := d.AddVertex(ctx, v0)
+	v0update := idVertex{"foo"}
+	_, errUpdate := d.UpdateVertex(ctx, meta.Key, v0update)
+	if errUpdate != nil {
+		t.Error(errUpdate)
+	}
+	var v1 idVertex
+	_, errGet := d.GetVertex(ctx, meta.Key, &v1)
+	if errGet != nil {
+		t.Error(errGet)
+	}
+	if !reflect.DeepEqual(v1, v0update) {
+		t.Errorf("got %v, want %v", v1, v0update)
+	}
+}
+
 func TestDAG_GetOrder(t *testing.T) {
 	t.Parallel()
 	d := someNewDag(t)
@@ -164,7 +185,7 @@ func TestDAG_GetOrder(t *testing.T) {
 	}
 
 	for i := 1; i <= 10; i++ {
-		_, _ = d.AddVertex(ctx, idVertex{value: strconv.Itoa(i)})
+		_, _ = d.AddVertex(ctx, idVertex{strconv.Itoa(i)})
 		order, err = d.GetOrder(ctx)
 		if err != nil {
 			t.Error(err)
@@ -1295,11 +1316,11 @@ func someNewDag(t *testing.T) *arangodag.DAG {
 }
 
 type idVertex struct {
-	value string
+	Value string `json:"value"`
 }
 
 func (v idVertex) Key() string {
-	return v.value
+	return v.Value
 }
 
 func standardDAG(t *testing.T) *arangodag.DAG {
