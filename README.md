@@ -29,7 +29,7 @@ type myDocument struct {
 	Text string `json:"text"`
 }
 
-func Example() {
+func main() {
 
 	// new ArangoDB-connection
 	conn, _ := http.NewConnection(http.ConnectionConfig{Endpoints: []string{"http://localhost:8529"}})
