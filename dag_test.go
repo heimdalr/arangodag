@@ -158,7 +158,7 @@ func TestDAG_PutVertex(t *testing.T) {
 	v0 := idVertex{"1"}
 	meta, _ := d.AddVertex(ctx, v0)
 	v0update := idVertex{"foo"}
-	_, errUpdate := d.PutVertex(ctx, meta.Key, v0update)
+	_, errUpdate := d.ReplaceVertex(ctx, meta.Key, v0update)
 	if errUpdate != nil {
 		t.Error(errUpdate)
 	}

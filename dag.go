@@ -146,16 +146,16 @@ func (d *DAG) AddNamedVertex(ctx context.Context, key string, data interface{}) 
 	return d.Vertices.CreateDocument(ctx, v)
 }
 
-// PatchVertex updates the data of the vertex with the given key.
-func (d *DAG) PatchVertex(ctx context.Context, key string, data interface{}) (meta driver.DocumentMeta, err error) {
+// UpdateVertex updates the data of the vertex with the given key.
+func (d *DAG) UpdateVertex(ctx context.Context, key string, data interface{}) (meta driver.DocumentMeta, err error) {
 	v := dagVertex{
 		Data: data,
 	}
 	return d.Vertices.UpdateDocument(ctx, key, v)
 }
 
-// PutVertex replaces the data of the vertex with the given key.
-func (d *DAG) PutVertex(ctx context.Context, key string, data interface{}) (meta driver.DocumentMeta, err error) {
+// ReplaceVertex replaces the data of the vertex with the given key.
+func (d *DAG) ReplaceVertex(ctx context.Context, key string, data interface{}) (meta driver.DocumentMeta, err error) {
 	v := dagVertex{
 		Data: data,
 	}
