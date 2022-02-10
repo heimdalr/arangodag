@@ -10,7 +10,7 @@ GOPATH := $(shell env PATH=$(PATH) go env GOPATH)
 PATH := $(GOPATH)/bin:$(PATH)
 
 start_db: stop_db
-	docker run -e ARANGO_NO_AUTH=1 -p 8529:8529 --name arangodb-instance arangodb:3.8
+	docker run -e ARANGO_NO_AUTH=1 -p 8529:8529 --name arangodb-instance arangodb
 
 stop_db:
 	docker stop arangodb-instance 2>/dev/null || true

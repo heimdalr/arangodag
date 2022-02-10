@@ -948,7 +948,7 @@ func TestDAG_GetParents(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			if !reflect.DeepEqual(got, tt.want) {
+			if !reflect.DeepEqual(list2set(got), list2set(tt.want)) {
 				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
@@ -1058,7 +1058,7 @@ func TestDAG_GetAncestors(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			if !reflect.DeepEqual(got, tt.want) {
+			if !reflect.DeepEqual(list2set(got), list2set(tt.want)) {
 				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
@@ -1102,7 +1102,7 @@ func TestDAG_GetChildren(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			if !reflect.DeepEqual(got, tt.want) {
+			if !reflect.DeepEqual(list2set(got), list2set(tt.want)) {
 				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
@@ -1211,7 +1211,7 @@ func TestDAG_GetDescendants(t *testing.T) {
 			if err != nil {
 				t.Error(err)
 			}
-			if !reflect.DeepEqual(got, tt.want) {
+			if !reflect.DeepEqual(list2set(got), list2set(tt.want)) {
 				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
@@ -1312,6 +1312,8 @@ func someNewDag(t *testing.T) *arangodag.DAG {
 	if err != nil {
 		t.Fatalf("failed to setup new dag: %v", err)
 	}
+
+	//d.SetQueryLogging(true)
 	return d
 }
 
@@ -1374,4 +1376,12 @@ func parse(data json.RawMessage, i interface{}) error {
 		return errUn
 	}
 	return nil
+}
+
+func list2set(l []string) map[string]int {
+	s := make(map[string]int, len(l))
+	for _, v := range l {
+		s[v]++
+	}
+	return s
 }
