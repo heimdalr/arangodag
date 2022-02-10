@@ -35,6 +35,7 @@ open_doc:
 	gio open http://localhost:6060/pkg/github.com/heimdalr/arangodag/
 
 clean:
+	go clean -testcache
 	rm -f c.out
 
 .PHONY: start_db stop_db fmt test lint coverage start_doc open_doc clean
