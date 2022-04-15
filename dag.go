@@ -41,69 +41,86 @@ type KeyInterface interface {
 }
 
 // NewDAG creates / initializes a new DAG.
-func NewDAG(ctx context.Context, dbName, collectionName string, client driver.Client) (d *DAG, err error) {
+func NewDAG(ctx context.Context, dbName, collectionName string, client driver.Client, create bool) (*DAG, error) {
 
-	// use or create database
-	var db driver.Database
-	var exists bool
+	d := DAG{}
 
-	if exists, err = client.DatabaseExists(ctx, dbName); err != nil {
-		return
-	}
-	if exists {
-		db, err = client.Database(ctx, dbName)
-	} else {
-		db, err = client.CreateDatabase(ctx, dbName, nil)
-	}
+	// use an existing DB or create it, if requested
+	exists, err := client.DatabaseExists(ctx, dbName)
 	if err != nil {
-		return
+		return nil, fmt.Errorf("failed to check, if DB '%s' exists: %w", dbName, err)
+	}
+	if !exists {
+		if !create {
+			return nil, fmt.Errorf("DB '%s' does not exist", dbName)
+		} else {
+			if d.DB, err = client.CreateDatabase(ctx, dbName, nil); err != nil {
+				return nil, fmt.Errorf("failed to create DB '%s': %w", dbName, err)
+			}
+		}
+	} else {
+		d.DB, err = client.Database(ctx, dbName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to connnect to DB '%s': %w", dbName, err)
+		}
 	}
 
-	// use or create vertex collection
-	var vertices driver.Collection
+	// use an existing vertex collection or create it, if requested
 	vertexCollName := fmt.Sprintf("%s-%s", "v", collectionName)
-	if exists, err = db.CollectionExists(ctx, vertexCollName); err != nil {
-		return
+	if exists, err = d.DB.CollectionExists(ctx, vertexCollName); err != nil {
+		return nil, fmt.Errorf("failed to check, if vertex collection '%s' exists: %w", vertexCollName, err)
 	}
-	if exists {
-		vertices, err = db.Collection(ctx, vertexCollName)
+	if !exists {
+		if !create {
+			return nil, fmt.Errorf("vertex collection '%s' does not exist", vertexCollName)
+		} else {
+			d.Vertices, err = d.DB.CreateCollection(ctx, vertexCollName, nil)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create vertex collection '%s': %w", vertexCollName, err)
+			}
+		}
 	} else {
-		vertices, err = db.CreateCollection(ctx, vertexCollName, nil)
-	}
-	if err != nil {
-		return
+		d.Vertices, err = d.DB.Collection(ctx, vertexCollName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to connnect to vertex collection '%s': %w", vertexCollName, err)
+		}
 	}
 
-	// use or create edge collection
-	var edges driver.Collection
+	// use an existing edge collection or create it, if requested
 	edgeCollName := fmt.Sprintf("%s-%s", "e", collectionName)
-	if exists, err = db.CollectionExists(ctx, edgeCollName); err != nil {
-		return
+	if exists, err = d.DB.CollectionExists(ctx, edgeCollName); err != nil {
+		return nil, fmt.Errorf("failed to check, if edge collection '%s' exists: %w", edgeCollName, err)
 	}
-	if exists {
-		edges, err = db.Collection(ctx, edgeCollName)
+	if !exists {
+		if !create {
+			return nil, fmt.Errorf("edge collection '%s' does not exist", edgeCollName)
+		} else {
+			collectionOptions := &driver.CreateCollectionOptions{
+				Type: driver.CollectionTypeEdge,
+			}
+			d.Edges, err = d.DB.CreateCollection(ctx, edgeCollName, collectionOptions)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create edge collection '%s': %w", edgeCollName, err)
+			}
+
+			// ensure unique edges (from->to) (see: https://stackoverflow.com/a/43006762)
+			if _, _, err = d.Edges.EnsureHashIndex(
+				ctx,
+				[]string{"_from", "_to"},
+				&driver.EnsureHashIndexOptions{Unique: true},
+			); err != nil {
+				return nil, fmt.Errorf("failed to set unique edge constraint: %w", err)
+			}
+
+		}
 	} else {
-		collectionOptions := &driver.CreateCollectionOptions{
-			Type: driver.CollectionTypeEdge,
-		}
-		if edges, err = db.CreateCollection(ctx, edgeCollName, collectionOptions); err != nil {
-			return
-		}
-
-		// ensure unique edges (from->to) (see: https://stackoverflow.com/a/43006762)
-		if _, _, err = edges.EnsureHashIndex(
-			ctx,
-			[]string{"_from", "_to"},
-			&driver.EnsureHashIndexOptions{Unique: true},
-		); err != nil {
-			return
+		d.Edges, err = d.DB.Collection(ctx, edgeCollName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to connnect to edge collection '%s': %w", edgeCollName, err)
 		}
 	}
-	if err != nil {
-		return
-	}
 
-	return &DAG{DB: db, Vertices: vertices, Edges: edges}, nil
+	return &d, nil
 }
 
 // SetQueryLogging enables or disables query logging.

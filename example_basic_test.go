@@ -22,7 +22,7 @@ func Example() {
 
 	// connect to DAG (create a new one if necessary)
 	uid := strconv.FormatInt(time.Now().UnixNano(), 10)
-	d, _ := arangodag.NewDAG(ctx, "test-"+uid, uid, client)
+	d, _ := arangodag.NewDAG(ctx, "test-"+uid, uid, client, true)
 
 	// add some vertices (with explicit keys)
 	_, _ = d.AddNamedVertex(ctx, "0", "blah")
