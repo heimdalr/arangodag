@@ -50,7 +50,8 @@ func ConnectDAG(ctx context.Context, dbName, collectionName string, client drive
 // CreateDAG creates and returns a new DAG. CreateDAG returns an error, if the given DB
 // already exists.
 func CreateDAG(ctx context.Context, dbName, collectionName string, client driver.Client) (*DAG, error) {
-	// use an existing DB or create it, if requested
+
+	// Return an error if the DB already exists.
 	exists, err := client.DatabaseExists(ctx, dbName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check, if DB '%s' exists: %w", dbName, err)
