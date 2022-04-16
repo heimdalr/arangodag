@@ -1308,7 +1308,7 @@ func someNewDag(t *testing.T) *arangodag.DAG {
 
 	uid := strconv.FormatInt(time.Now().UnixNano(), 10)
 
-	d, err := arangodag.NewDAG(ctx, "test-"+uid, uid, client, true)
+	d, err := arangodag.CreateDAG(ctx, "test-"+uid, uid, client)
 	if err != nil {
 		t.Fatalf("failed to setup new dag: %v", err)
 	}

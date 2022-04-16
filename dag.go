@@ -40,8 +40,28 @@ type KeyInterface interface {
 	Key() string
 }
 
-// NewDAG creates / initializes a new DAG.
-func NewDAG(ctx context.Context, dbName, collectionName string, client driver.Client, create bool) (*DAG, error) {
+// ConnectDAG returns a DAG instance from the given DB and collection name.
+// ConnectDAG returns an error if the DB does not exist or does not contain
+// collections that provide for a valid DAG.
+func ConnectDAG(ctx context.Context, dbName, collectionName string, client driver.Client) (*DAG, error) {
+	return newDAG(ctx, dbName, collectionName, client, false)
+}
+
+// CreateDAG creates and returns a new DAG. CreateDAG returns an error, if the given DB
+// already exists.
+func CreateDAG(ctx context.Context, dbName, collectionName string, client driver.Client) (*DAG, error) {
+	// use an existing DB or create it, if requested
+	exists, err := client.DatabaseExists(ctx, dbName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check, if DB '%s' exists: %w", dbName, err)
+	}
+	if exists {
+		return nil, fmt.Errorf("DB '%s' already exists", dbName)
+	}
+	return newDAG(ctx, dbName, collectionName, client, true)
+}
+
+func newDAG(ctx context.Context, dbName, collectionName string, client driver.Client, create bool) (*DAG, error) {
 
 	d := DAG{}
 

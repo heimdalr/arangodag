@@ -25,7 +25,7 @@ func TestTiming(t *testing.T) {
 
 	// connect to DAG (create a new one if necessary)
 	uid := strconv.FormatInt(time.Now().UnixNano(), 10)
-	d, _ := arangodag.NewDAG(ctx, "test-"+uid, uid, client, true)
+	d, _ := arangodag.CreateDAG(ctx, "test-"+uid, uid, client)
 
 	createLarge(d)
 	getDescendants(d)
