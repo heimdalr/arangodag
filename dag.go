@@ -23,6 +23,12 @@ type DAG struct {
 	queryLogging bool
 }
 
+// Info contains basic information about the DAG.
+type Info struct {
+	Nodes     int64 `json:"nodes"`
+	Relations int64 `json:"relations"`
+}
+
 type dagEdge struct {
 	From driver.DocumentID `json:"_from"`
 	To   driver.DocumentID `json:"_to"`
@@ -50,15 +56,6 @@ func ConnectDAG(ctx context.Context, dbName, collectionName string, client drive
 // CreateDAG creates and returns a new DAG. CreateDAG returns an error, if the given DB
 // already exists.
 func CreateDAG(ctx context.Context, dbName, collectionName string, client driver.Client) (*DAG, error) {
-
-	// Return an error if the DB already exists.
-	exists, err := client.DatabaseExists(ctx, dbName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check, if DB '%s' exists: %w", dbName, err)
-	}
-	if exists {
-		return nil, fmt.Errorf("DB '%s' already exists", dbName)
-	}
 	return newDAG(ctx, dbName, collectionName, client, true)
 }
 
@@ -567,6 +564,22 @@ func (d *DAG) String(ctx context.Context) (result string, err error) {
 	// get the dot string
 	result = g.String()
 	return
+}
+
+// Info returns information about the DAG.
+func (d *DAG) Info(ctx context.Context) (Info, error) {
+	info := Info{}
+	nodeCount, errorVertexCount := d.Vertices.Count(ctx)
+	if errorVertexCount != nil {
+		return Info{}, errorVertexCount
+	}
+	info.Nodes = nodeCount
+	relationCount, errorRelationCount := d.Edges.Count(ctx)
+	if errorRelationCount != nil {
+		return Info{}, errorRelationCount
+	}
+	info.Relations = relationCount
+	return info, nil
 }
 
 func (d *DAG) getRelatives(ctx context.Context, srcKey string, outbound bool, depth int, dfs bool) (driver.Cursor, error) {
